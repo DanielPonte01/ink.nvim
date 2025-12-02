@@ -1,0 +1,16 @@
+# Claude Code settings and documentation
+.claude/
+CLAUDE.md
+
+# Development artifacts
+todo.md
+debug_*.lua
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
