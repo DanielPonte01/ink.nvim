@@ -10,7 +10,10 @@ local default_config = {
     next_chapter = "]c",
     prev_chapter = "[c",
     toggle_toc = "<leader>t",
-    activate = "<CR>"
+    activate = "<CR>",
+    search_toc = "<leader>pit",
+    search_content = "<leader>pif",
+    search_mode_toggle = "<C-f>"  -- Toggle between TOC and content search
   },
   max_width = 120,
   highlight_colors = {

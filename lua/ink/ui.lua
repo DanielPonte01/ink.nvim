@@ -311,6 +311,199 @@ function M.toggle_toc()
   end
 end
 
+-- Search TOC/Chapters (shows all chapters with preview)
+function M.search_toc(initial_text)
+  -- Check if telescope is installed
+  local ok_pickers, pickers = pcall(require, 'telescope.pickers')
+  local ok_finders, finders = pcall(require, 'telescope.finders')
+  local ok_conf, conf = pcall(require, 'telescope.config')
+  local ok_previewers, previewers = pcall(require, 'telescope.previewers')
+  local ok_actions, actions = pcall(require, 'telescope.actions')
+  local ok_action_state, action_state = pcall(require, 'telescope.actions.state')
+
+  if not (ok_pickers and ok_finders and ok_conf and ok_previewers and ok_actions and ok_action_state) then
+    vim.notify("Telescope not found. Install telescope.nvim to use search.", vim.log.levels.ERROR)
+    return
+  end
+
+  -- Check if a book is currently open
+  if not ctx.data then
+    vim.notify("No book currently open", vim.log.levels.WARN)
+    return
+  end
+
+  -- Build list of searchable entries (all chapters)
+  local entries = {}
+  for idx, chapter in ipairs(ctx.data.spine) do
+    local chapter_path = ctx.data.base_dir .. "/" .. chapter.href
+
+    -- Try to get chapter name from TOC
+    local chapter_name = nil
+    local chapter_href = chapter.href
+    for _, toc_item in ipairs(ctx.data.toc) do
+      local toc_href = toc_item.href:match("^([^#]+)") or toc_item.href
+      if toc_href == chapter_href then
+        chapter_name = toc_item.label
+        break
+      end
+    end
+
+    -- Fallback to chapter number
+    if not chapter_name then
+      chapter_name = "Chapter " .. idx
+    end
+
+    table.insert(entries, {
+      display = string.format("[%d/%d] %s", idx, #ctx.data.spine, chapter_name),
+      ordinal = chapter_name, -- What to search against
+      chapter_idx = idx,
+      chapter_path = chapter_path,
+      chapter_name = chapter_name
+    })
+  end
+
+  -- Get toggle key from config
+  local toggle_key = M.config.keymaps.search_mode_toggle or "<C-f>"
+  local toggle_key_display = toggle_key:gsub("<", ""):gsub(">", "")
+
+  -- Create custom picker
+  pickers.new({}, {
+    prompt_title = string.format("Search Book Chapters (%s for content search)", toggle_key_display),
+    default_text = initial_text or "",
+    finder = finders.new_table({
+      results = entries,
+      entry_maker = function(entry)
+        return {
+          value = entry,
+          display = entry.display,
+          ordinal = entry.ordinal,
+          path = entry.chapter_path,
+          chapter_idx = entry.chapter_idx
+        }
+      end
+    }),
+    previewer = previewers.new_buffer_previewer({
+      title = "Chapter Preview",
+      define_preview = function(self, entry)
+        -- Read and parse the chapter HTML
+        local content = fs.read_file(entry.path)
+        if not content then
+          vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, {"Error reading chapter"})
+          return
+        end
+
+        -- Parse HTML to plain text
+        local max_width = M.config.max_width or 120
+        local class_styles = ctx.data.class_styles or {}
+        local parsed = html.parse(content, max_width, class_styles)
+
+        -- Show parsed lines in preview
+        vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, parsed.lines)
+
+        -- Apply basic syntax highlighting to preview
+        vim.api.nvim_set_option_value("filetype", "ink_content", { buf = self.state.bufnr })
+      end
+    }),
+    sorter = conf.values.generic_sorter({}),
+    attach_mappings = function(prompt_bufnr, map)
+      actions.select_default:replace(function()
+        local selection = action_state.get_selected_entry()
+        actions.close(prompt_bufnr)
+
+        -- Navigate to the selected chapter
+        M.render_chapter(selection.chapter_idx)
+
+        -- Focus on content window
+        if ctx.content_win and vim.api.nvim_win_is_valid(ctx.content_win) then
+          vim.api.nvim_set_current_win(ctx.content_win)
+        end
+      end)
+
+      -- Add configurable key to switch to content search mode
+      if toggle_key then
+        map('i', toggle_key, function()
+          local current_picker = action_state.get_current_picker(prompt_bufnr)
+          local current_prompt = current_picker:_get_prompt()
+          actions.close(prompt_bufnr)
+
+          -- Switch to content search
+          M.search_content(current_prompt)
+        end)
+      end
+
+      return true
+    end
+  }):find()
+end
+
+-- Search content (live_grep directly)
+function M.search_content(initial_text)
+  -- Check if telescope is installed
+  local ok, builtin = pcall(require, 'telescope.builtin')
+  if not ok then
+    vim.notify("Telescope not found. Install telescope.nvim to use search.", vim.log.levels.ERROR)
+    return
+  end
+
+  -- Check if a book is currently open
+  if not ctx.data then
+    vim.notify("No book currently open", vim.log.levels.WARN)
+    return
+  end
+
+  local actions = require('telescope.actions')
+  local action_state = require('telescope.actions.state')
+
+  -- Get toggle key from config
+  local toggle_key = M.config.keymaps.search_mode_toggle or "<C-f>"
+  local toggle_key_display = toggle_key:gsub("<", ""):gsub(">", "")
+
+  builtin.live_grep({
+    prompt_title = string.format("Search in Book Content (%s for TOC search)", toggle_key_display),
+    search_dirs = {ctx.data.cache_dir},
+    glob_pattern = "*.{xhtml,html}",
+    default_text = initial_text or "",
+    attach_mappings = function(prompt_bufnr, map)
+      map('i', '<CR>', function(prompt_bufnr)
+        local selection = action_state.get_selected_entry()
+        actions.close(prompt_bufnr)
+
+        -- Parse filename and find chapter
+        local filename = vim.fn.fnamemodify(selection.filename, ":t")
+        local line_num = selection.lnum
+
+        -- Find chapter index that matches this file
+        for idx, chapter in ipairs(ctx.data.spine) do
+          if chapter.href:match(filename) then
+            M.render_chapter(idx, line_num)
+            -- Focus on content window
+            if ctx.content_win and vim.api.nvim_win_is_valid(ctx.content_win) then
+              vim.api.nvim_set_current_win(ctx.content_win)
+            end
+            return
+          end
+        end
+
+        vim.notify("Could not find chapter for: " .. filename, vim.log.levels.WARN)
+      end)
+
+      -- Add configurable key to switch back to TOC search mode
+      if toggle_key then
+        map('i', toggle_key, function()
+          local current_picker = action_state.get_current_picker(prompt_bufnr)
+          local current_prompt = current_picker:_get_prompt()
+          actions.close(prompt_bufnr)
+
+          -- Switch to TOC search (with current prompt text preserved)
+          M.search_toc(current_prompt)
+        end)
+      end
+
+      return true
+    end
+  })
+end
+
 function M.next_chapter()
   M.render_chapter(ctx.current_chapter_idx + 1)
 end
@@ -484,6 +677,14 @@ function M.setup_keymaps(buf)
 
   if keymaps.activate then
     vim.api.nvim_buf_set_keymap(buf, "n", keymaps.activate, ":lua require('ink.ui').handle_enter()<CR>", opts)
+  end
+
+  if keymaps.search_toc then
+    vim.api.nvim_buf_set_keymap(buf, "n", keymaps.search_toc, ":lua require('ink.ui').search_toc()<CR>", opts)
+  end
+
+  if keymaps.search_content then
+    vim.api.nvim_buf_set_keymap(buf, "n", keymaps.search_content, ":lua require('ink.ui').search_content()<CR>", opts)
   end
 end
 

@@ -14,3 +14,7 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# Test files
+teste/
+scr/
