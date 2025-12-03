@@ -2,11 +2,12 @@ local M = {}
 
 -- Check if a command exists
 local function command_exists(cmd)
-  local handle = io.popen("command -v " .. cmd)
-  if not handle then return false end
-  local result = handle:read("*a")
-  handle:close()
-  return result ~= ""
+  -- Sanitize cmd to only allow safe characters (alphanumeric, dash, underscore)
+  if not cmd:match("^[%w_-]+$") then
+    return false
+  end
+  -- Use vim.fn.executable for safer command checking
+  return vim.fn.executable(cmd) == 1
 end
 
 -- Ensure unzip is available
@@ -35,31 +36,38 @@ end
 
 -- Create directory if it doesn't exist
 function M.ensure_dir(path)
-  os.execute("mkdir -p " .. vim.fn.shellescape(path))
+  -- Use Neovim's built-in mkdir function (safer than os.execute)
+  -- "p" flag creates parent directories as needed
+  vim.fn.mkdir(path, "p")
 end
 
 -- Unzip EPUB to destination
 function M.unzip(epub_path, dest_dir)
   M.ensure_dir(dest_dir)
+
+  -- Resolve and validate paths to prevent path traversal
+  epub_path = vim.fn.resolve(vim.fn.fnamemodify(epub_path, ":p"))
+  dest_dir = vim.fn.resolve(vim.fn.fnamemodify(dest_dir, ":p"))
+
+  -- Use vim.fn.system with array for safer command execution
   -- -o: overwrite without prompting
   -- -q: quiet mode
   -- -d: destination directory
-  local cmd = string.format("unzip -o -q %s -d %s", vim.fn.shellescape(epub_path), vim.fn.shellescape(dest_dir))
-  local result = os.execute(cmd)
-  return result == 0
+  local result = vim.fn.system({"unzip", "-o", "-q", epub_path, "-d", dest_dir})
+  return vim.v.shell_error == 0
 end
 
 -- List files in directory (simple wrapper)
 function M.scandir(directory)
-    local i, t, popen = 0, {}, io.popen
-    local pfile = popen('ls -a "'..directory..'"')
-    if not pfile then return {} end
-    for filename in pfile:lines() do
-        i = i + 1
-        t[i] = filename
-    end
-    pfile:close()
-    return t
+  -- Use Neovim's built-in readdir function (safer than shell command)
+  local ok, items = pcall(vim.fn.readdir, directory)
+  if not ok then
+    return {}
+  end
+  -- readdir doesn't include . and .. by default, add them for compatibility
+  table.insert(items, 1, ".")
+  table.insert(items, 2, "..")
+  return items
 end
 
 -- Join paths

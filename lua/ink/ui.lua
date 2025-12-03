@@ -1,6 +1,7 @@
 local html = require("ink.html")
 local fs = require("ink.fs")
 local state = require("ink.state")
+local user_highlights = require("ink.user_highlights")
 
 local M = {
   config = { max_width = 120 }
@@ -21,7 +22,8 @@ local ctx = {
   ns_id = vim.api.nvim_create_namespace("ink_nvim"),
   images = {}, -- Store image data for current chapter
   links = {},   -- Store link data for current chapter
-  anchors = {}  -- Store anchor data for current chapter
+  anchors = {},  -- Store anchor data for current chapter
+  last_statusline_percent = 0  -- Track last percentage to reduce updates
 }
 
 -- Helper to open image
@@ -37,55 +39,94 @@ local function open_image(src)
   -- Normalize the path (resolve .. and . components)
   image_path = vim.fn.resolve(image_path)
 
+  -- SECURITY: Validate image is within cache directory (prevent path traversal)
+  local cache_root = vim.fn.resolve(ctx.data.cache_dir)
+  if image_path:sub(1, #cache_root) ~= cache_root then
+    vim.notify("Access denied: Image path outside EPUB cache", vim.log.levels.ERROR)
+    return
+  end
+
   -- Check if image exists
   if not fs.exists(image_path) then
     vim.notify("Image not found: " .. src, vim.log.levels.ERROR)
     return
   end
 
-  -- Determine open command based on OS
-  local open_cmd
+  -- Determine open command based on OS and build command array
+  local cmd
   if vim.fn.has("mac") == 1 then
-    open_cmd = "open"
+    cmd = {"open", image_path}
   elseif vim.fn.has("unix") == 1 then
-    open_cmd = "xdg-open"
+    cmd = {"xdg-open", image_path}
   elseif vim.fn.has("win32") == 1 then
-    open_cmd = "start"
+    -- Windows cmd requires special handling
+    cmd = {"cmd", "/c", "start", "", image_path}
   end
 
-  if not open_cmd then
+  if not cmd then
     vim.notify("Could not determine image viewer command for your OS", vim.log.levels.ERROR)
     return
   end
 
-  -- Open the image directly from cache (no need to copy)
-  local cmd = string.format("%s %s &", open_cmd, vim.fn.shellescape(image_path))
-  local success = os.execute(cmd)
+  -- Use vim.fn.jobstart for safer async command execution
+  local job_id = vim.fn.jobstart(cmd, {
+    detach = true,
+    on_exit = function(_, exit_code)
+      if exit_code ~= 0 then
+        vim.notify("Failed to open image: " .. src, vim.log.levels.ERROR)
+      end
+    end
+  })
 
-  if not success then
-    vim.notify("Failed to open image: " .. src, vim.log.levels.ERROR)
+  if job_id <= 0 then
+    vim.notify("Failed to start image viewer", vim.log.levels.ERROR)
   end
 end
 
 local function update_statusline()
   if not ctx.content_win or not vim.api.nvim_win_is_valid(ctx.content_win) then return end
-  
+
   local total = #ctx.data.spine
   local current = ctx.current_chapter_idx
-  local percent = math.floor((current / total) * 100)
-  
+
+  -- Calculate percentage of current chapter
+  local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
+  local current_line = cursor[1]
+  local total_lines = vim.api.nvim_buf_line_count(ctx.content_buf)
+  local percent = math.floor((current_line / total_lines) * 100)
+
   -- Simple progress bar
   local bar_len = 10
   local filled = math.floor((percent / 100) * bar_len)
   local bar = string.rep("█", filled) .. string.rep("▒", bar_len - filled)
-  
-  local status = string.format(" %s %d%%%% | Chapter %d/%d ", bar, percent, current, total)
+
+  -- Get chapter name from TOC
+  local chapter_name = nil
+  local current_href = ctx.data.spine[current].href
+
+  -- Try to find matching TOC entry
+  for _, toc_item in ipairs(ctx.data.toc) do
+    -- Normalize href (remove anchor)
+    local toc_href = toc_item.href:match("^([^#]+)") or toc_item.href
+    if toc_href == current_href then
+      chapter_name = toc_item.label
+      break
+    end
+  end
+
+  -- Fallback to "Chapter X" if no TOC entry found
+  if not chapter_name then
+    chapter_name = "Chapter " .. current
+  end
+
+  local status = string.format(" %s %d%%%% | %s | %d/%d ", bar, percent, chapter_name, current, total)
   vim.api.nvim_set_option_value("statusline", status, { win = ctx.content_win })
 end
 
 function M.render_chapter(idx, restore_line)
   if idx < 1 or idx > #ctx.data.spine then return end
   ctx.current_chapter_idx = idx
+  ctx.last_statusline_percent = 0  -- Reset percentage tracking for new chapter
 
   -- Check if content window is still valid, if not recreate it
   if not ctx.content_win or not vim.api.nvim_win_is_valid(ctx.content_win) then
@@ -198,6 +239,36 @@ function M.render_chapter(idx, restore_line)
   ctx.links = parsed.links
   ctx.anchors = parsed.anchors
 
+  -- Apply user highlights
+  local chapter_highlights = user_highlights.get_chapter_highlights(ctx.data.slug, idx)
+  for _, hl in ipairs(chapter_highlights) do
+    local start_line = hl.start_line - 1  -- Convert to 0-based
+    local end_line = hl.end_line - 1
+
+    -- Apply padding shift to columns
+    local start_col = hl.start_col + padding
+    local end_col = hl.end_col + padding
+
+    -- Validate lines exist
+    if start_line >= 0 and start_line < #parsed.lines and end_line >= 0 and end_line < #parsed.lines then
+      -- Validate and clamp columns
+      local start_line_length = #parsed.lines[start_line + 1]
+      local end_line_length = #parsed.lines[end_line + 1]
+
+      start_col = math.min(start_col, start_line_length)
+      end_col = math.min(end_col, end_line_length)
+
+      -- Apply highlight
+      local hl_group = "InkUserHighlight_" .. hl.color
+      vim.api.nvim_buf_set_extmark(ctx.content_buf, ctx.ns_id, start_line, start_col, {
+        end_line = end_line,
+        end_col = end_col,
+        hl_group = hl_group,
+        priority = 2000  -- Higher priority than text formatting
+      })
+    end
+  end
+
   -- Restore position (with safety check)
   if ctx.content_win and vim.api.nvim_win_is_valid(ctx.content_win) then
     if restore_line then
@@ -289,6 +360,116 @@ function M.handle_enter()
   end
 end
 
+-- Add highlight to current visual selection
+function M.add_highlight(color)
+  local buf = vim.api.nvim_get_current_buf()
+
+  -- Only work in content buffer
+  if buf ~= ctx.content_buf then
+    vim.notify("Highlights can only be added in the content buffer", vim.log.levels.WARN)
+    return
+  end
+
+  -- Verify color exists in config
+  if not M.config.highlight_colors[color] then
+    vim.notify("Unknown highlight color: " .. color, vim.log.levels.ERROR)
+    return
+  end
+
+  -- Get visual selection
+  local start_pos = vim.fn.getpos("'<")
+  local end_pos = vim.fn.getpos("'>")
+
+  local start_line = start_pos[2]
+  local start_col = start_pos[3] - 1  -- Convert to 0-based
+  local end_line = end_pos[2]
+  local end_col = end_pos[3]  -- Already exclusive
+
+  -- Calculate window padding to adjust positions back
+  local win_width = vim.api.nvim_win_get_width(ctx.content_win)
+  local max_width = M.config.max_width or 120
+  local padding = 0
+  if win_width > max_width then
+    padding = math.floor((win_width - max_width) / 2)
+  end
+
+  -- Store highlight with positions adjusted for padding (unpadded positions)
+  -- Clamp to ensure we don't highlight padding area
+  local adjusted_start_col = math.max(0, start_col - padding)
+  local adjusted_end_col = math.max(0, end_col - padding)
+
+  -- If the selection starts in the padding area, move it to the start of actual content
+  if start_col < padding then
+    adjusted_start_col = 0
+  end
+
+  -- Skip if the entire selection is in the padding area
+  if end_col <= padding then
+    vim.notify("Selection is in padding area, no highlight added", vim.log.levels.WARN)
+    return
+  end
+
+  local highlight = {
+    chapter = ctx.current_chapter_idx,
+    start_line = start_line,
+    start_col = adjusted_start_col,
+    end_line = end_line,
+    end_col = adjusted_end_col,
+    color = color
+  }
+
+  user_highlights.add_highlight(ctx.data.slug, highlight)
+
+  -- Re-render to show the new highlight
+  -- Place cursor at the END of selection (for reading flow)
+  M.render_chapter(ctx.current_chapter_idx, end_line)
+
+  -- Restore cursor position at end of selection
+  if ctx.content_win and vim.api.nvim_win_is_valid(ctx.content_win) then
+    vim.api.nvim_win_set_cursor(ctx.content_win, {end_line, end_col})
+  end
+
+  vim.notify("Highlight added", vim.log.levels.INFO)
+end
+
+-- Remove highlight under cursor
+function M.remove_highlight()
+  local buf = vim.api.nvim_get_current_buf()
+
+  -- Only work in content buffer
+  if buf ~= ctx.content_buf then
+    vim.notify("Highlights can only be removed in the content buffer", vim.log.levels.WARN)
+    return
+  end
+
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local line = cursor[1]
+  local col = cursor[2]
+
+  -- Calculate window padding to adjust positions
+  local win_width = vim.api.nvim_win_get_width(ctx.content_win)
+  local max_width = M.config.max_width or 120
+  local padding = 0
+  if win_width > max_width then
+    padding = math.floor((win_width - max_width) / 2)
+  end
+
+  -- Adjust for padding (convert to unpadded position)
+  local adjusted_col = col - padding
+
+  local removed = user_highlights.remove_highlight(ctx.data.slug, ctx.current_chapter_idx, line, adjusted_col)
+
+  -- Re-render to remove the highlight
+  M.render_chapter(ctx.current_chapter_idx, line)
+
+  -- Restore cursor position exactly where it was
+  if ctx.content_win and vim.api.nvim_win_is_valid(ctx.content_win) then
+    vim.api.nvim_win_set_cursor(ctx.content_win, cursor)
+  end
+
+  vim.notify("Highlight removed", vim.log.levels.INFO)
+end
+
 function M.setup_keymaps(buf)
   local opts = { noremap = true, silent = true }
   local keymaps = M.config.keymaps or {}
@@ -376,8 +557,26 @@ function M.open_book(epub_data)
     vim.api.nvim_buf_set_keymap(ctx.toc_buf, "n", keymaps.toggle_toc, ":lua require('ink.ui').toggle_toc()<CR>", toggle_opts)
   end
 
-  -- Setup autocmd for window resize
-  local augroup = vim.api.nvim_create_augroup("InkResize_" .. epub_data.slug, { clear = true })
+  -- Setup user highlight keymaps (visual mode only, content buffer only)
+  local highlight_keymaps = M.config.highlight_keymaps or {}
+  local hl_opts = { noremap = true, silent = true }
+
+  for color_name, keymap in pairs(highlight_keymaps) do
+    if color_name == "remove" then
+      -- Remove highlight (normal mode)
+      vim.api.nvim_buf_set_keymap(ctx.content_buf, "n", keymap,
+        ":lua require('ink.ui').remove_highlight()<CR>", hl_opts)
+    else
+      -- Add highlight (visual mode)
+      vim.api.nvim_buf_set_keymap(ctx.content_buf, "v", keymap,
+        string.format(":lua require('ink.ui').add_highlight('%s')<CR>", color_name), hl_opts)
+    end
+  end
+
+  -- Setup autocmds
+  local augroup = vim.api.nvim_create_augroup("Ink_" .. epub_data.slug, { clear = true })
+
+  -- Window resize
   vim.api.nvim_create_autocmd("WinResized", {
     group = augroup,
     callback = function()
@@ -394,6 +593,28 @@ function M.open_book(epub_data)
             break
           end
         end
+      end
+    end,
+  })
+
+  -- Update statusline on cursor movement (for chapter progress)
+  -- Only update when percentage changes by 10% or more to reduce distraction
+  vim.api.nvim_create_autocmd({"CursorMoved", "CursorMovedI"}, {
+    group = augroup,
+    buffer = ctx.content_buf,
+    callback = function()
+      if not ctx.content_win or not vim.api.nvim_win_is_valid(ctx.content_win) then return end
+
+      -- Calculate current percentage
+      local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
+      local current_line = cursor[1]
+      local total_lines = vim.api.nvim_buf_line_count(ctx.content_buf)
+      local percent = math.floor((current_line / total_lines) * 100)
+
+      -- Only update if percentage changed by 10% or more
+      if math.abs(percent - ctx.last_statusline_percent) >= 10 then
+        ctx.last_statusline_percent = percent
+        update_statusline()
       end
     end,
   })

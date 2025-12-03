@@ -23,6 +23,19 @@ local function get_attribute(tag_string, attr)
   return tag_string:match(escaped_attr .. '=["\']([^"\']+)["\']')
 end
 
+-- SECURITY: Validate that a path is within the allowed base directory
+local function validate_path(path, base_dir)
+  local resolved = vim.fn.resolve(path)
+  local base = vim.fn.resolve(base_dir)
+
+  -- Ensure resolved path is within base directory (prevent path traversal)
+  if resolved:sub(1, #base) ~= base then
+    error("Path traversal attempt detected: " .. path)
+  end
+
+  return resolved
+end
+
 function M.open(epub_path)
   if not fs.exists(epub_path) then
     error("File not found: " .. epub_path)
@@ -30,10 +43,31 @@ function M.open(epub_path)
 
   local slug = get_slug(epub_path)
   local cache_dir = get_cache_dir() .. "/" .. slug
-  
-  -- Unzip if not already there (or maybe always unzip to be safe/update?)
-  -- For now, let's assume if dir exists, it's fine.
+
+  -- Check if we need to extract/re-extract
+  local needs_extraction = false
+
   if not fs.exists(cache_dir) then
+    needs_extraction = true
+  else
+    -- Check modification times - re-extract if EPUB is newer than cache
+    local epub_stat = vim.loop.fs_stat(epub_path)
+    local cache_stat = vim.loop.fs_stat(cache_dir)
+
+    if epub_stat and cache_stat then
+      -- Compare modification times (mtime is in seconds since epoch)
+      if epub_stat.mtime.sec > cache_stat.mtime.sec then
+        needs_extraction = true
+        -- Remove old cache before re-extracting
+        vim.fn.delete(cache_dir, "rf")
+      end
+    else
+      -- If we can't get stats, re-extract to be safe
+      needs_extraction = true
+    end
+  end
+
+  if needs_extraction then
     local success = fs.unzip(epub_path, cache_dir)
     if not success then
       error("Failed to unzip epub")
@@ -50,6 +84,9 @@ function M.open(epub_path)
   local rootfile_tag = container_xml:match("<rootfile%s+[^>]+>")
   local opf_rel_path = get_attribute(rootfile_tag, "full-path")
   local opf_path = cache_dir .. "/" .. opf_rel_path
+
+  -- SECURITY: Validate OPF path is within cache directory
+  opf_path = validate_path(opf_path, cache_dir)
   local opf_dir = vim.fn.fnamemodify(opf_path, ":h")
 
   -- 2. Read OPF
@@ -104,6 +141,8 @@ function M.open(epub_path)
   local toc = {}
   if toc_href then
     local toc_path = opf_dir .. "/" .. toc_href
+    -- SECURITY: Validate TOC path is within cache directory
+    toc_path = validate_path(toc_path, cache_dir)
     local toc_content = fs.read_file(toc_path)
     
     -- Helper to normalize path
@@ -205,7 +244,13 @@ function M.open(epub_path)
   for id, item in pairs(manifest) do
     if item.media_type == "text/css" then
       local css_path = opf_dir .. "/" .. item.href
-      local css_content = fs.read_file(css_path)
+      -- SECURITY: Validate CSS path is within cache directory
+      local ok, validated_path = pcall(validate_path, css_path, cache_dir)
+      if not ok then
+        -- Skip invalid CSS files instead of erroring
+        goto continue
+      end
+      local css_content = fs.read_file(validated_path)
       if css_content then
         local styles = css_parser.parse_css(css_content)
         -- Merge styles from this CSS file
@@ -213,6 +258,7 @@ function M.open(epub_path)
           class_styles[class_name] = style
         end
       end
+      ::continue::
     end
   end
 
