@@ -111,7 +111,7 @@ local function show_footnote_preview(anchor_id)
   -- Find where footnote ends (next blank line or reasonable cutoff)
   local footnote_lines = {}
   local found_content = false
-  for i, line in ipairs(lines) do
+  for _, line in ipairs(lines) do
     -- Skip leading empty lines
     if not found_content and line:match("^%s*$") then
       goto continue
@@ -155,7 +155,7 @@ local function show_footnote_preview(anchor_id)
           end
           current = word
         else
-          if #current == "" then
+          if current == "" then
             current = word
           else
             current = current .. " " .. word
@@ -284,9 +284,7 @@ local function jump_to_link()
 end
 
 -- Expose jump_to_link for keymap
-M.jump_to_link = function()
-  jump_to_link()
-end
+M.jump_to_link = jump_to_link
 
 local function update_statusline()
   if not ctx.content_win or not vim.api.nvim_win_is_valid(ctx.content_win) then return end
@@ -400,7 +398,7 @@ function M.render_chapter(idx, restore_line)
       })
     end
   end
-  
+
   -- Apply highlights (with validation to prevent out-of-range errors)
   for _, hl in ipairs(parsed.highlights) do
     -- hl: { line (1-based), col_start, col_end, group }
@@ -427,14 +425,13 @@ function M.render_chapter(idx, restore_line)
       end
     end
   end
-  
+
   ctx.images = parsed.images
   ctx.links = parsed.links
   ctx.anchors = parsed.anchors
   ctx.justify_map = parsed.justify_map or {}
 
   -- Apply user highlights (forward-map positions if justify is enabled)
-  local justify_text = M.config.justify_text or false
   local chapter_highlights = user_highlights.get_chapter_highlights(ctx.data.slug, idx)
   for _, hl in ipairs(chapter_highlights) do
     local start_line = hl.start_line - 1  -- Convert to 0-based
@@ -480,7 +477,7 @@ function M.render_chapter(idx, restore_line)
   end
 
   update_statusline()
-  
+
   -- Save state
   state.save(ctx.data.slug, { chapter = idx, line = restore_line or 1 })
 
@@ -669,7 +666,7 @@ function M.search_content(initial_text)
     glob_pattern = "*.{xhtml,html}",
     default_text = initial_text or "",
     attach_mappings = function(prompt_bufnr, map)
-      map('i', '<CR>', function(prompt_bufnr)
+      map('i', '<CR>', function()
         local selection = action_state.get_selected_entry()
         actions.close(prompt_bufnr)
 
@@ -907,7 +904,7 @@ function M.remove_highlight()
   end
 
   -- Remove highlight using canonical position
-  local removed = user_highlights.remove_highlight(ctx.data.slug, ctx.current_chapter_idx, line, lookup_col)
+  user_highlights.remove_highlight(ctx.data.slug, ctx.current_chapter_idx, line, lookup_col)
 
   -- Re-render to remove the highlight
   M.render_chapter(ctx.current_chapter_idx, line)
@@ -1017,12 +1014,12 @@ function M.open_book(epub_data)
   vim.api.nvim_buf_set_name(ctx.content_buf, content_name)
   vim.api.nvim_set_option_value("filetype", "ink_content", { buf = ctx.content_buf })
   vim.api.nvim_set_option_value("syntax", "off", { buf = ctx.content_buf })  -- Disable syntax highlighting
-  
+
   -- Setup Layout
   vim.cmd("tabnew")
   ctx.content_win = vim.api.nvim_get_current_win()
   vim.api.nvim_win_set_buf(ctx.content_win, ctx.content_buf)
-  
+
   -- Render TOC
   M.render_toc()
   M.toggle_toc() -- Open TOC by default
@@ -1039,32 +1036,31 @@ function M.open_book(epub_data)
     M.render_chapter(1)
     -- First time opening - leave cursor in TOC to browse chapters
   end
-  
+
   -- Keymaps
   M.setup_keymaps(ctx.content_buf)
   M.setup_keymaps(ctx.toc_buf)
 
   -- Add toggle TOC keymap to both buffers
   local keymaps = M.config.keymaps or {}
+  local keymap_opts = { noremap = true, silent = true }
   if keymaps.toggle_toc then
-    local toggle_opts = { noremap = true, silent = true }
-    vim.api.nvim_buf_set_keymap(ctx.content_buf, "n", keymaps.toggle_toc, ":lua require('ink.ui').toggle_toc()<CR>", toggle_opts)
-    vim.api.nvim_buf_set_keymap(ctx.toc_buf, "n", keymaps.toggle_toc, ":lua require('ink.ui').toggle_toc()<CR>", toggle_opts)
+    vim.api.nvim_buf_set_keymap(ctx.content_buf, "n", keymaps.toggle_toc, ":lua require('ink.ui').toggle_toc()<CR>", keymap_opts)
+    vim.api.nvim_buf_set_keymap(ctx.toc_buf, "n", keymaps.toggle_toc, ":lua require('ink.ui').toggle_toc()<CR>", keymap_opts)
   end
 
   -- Setup user highlight keymaps (visual mode only, content buffer only)
   local highlight_keymaps = M.config.highlight_keymaps or {}
-  local hl_opts = { noremap = true, silent = true }
 
   for color_name, keymap in pairs(highlight_keymaps) do
     if color_name == "remove" then
       -- Remove highlight (normal mode)
       vim.api.nvim_buf_set_keymap(ctx.content_buf, "n", keymap,
-        ":lua require('ink.ui').remove_highlight()<CR>", hl_opts)
+        ":lua require('ink.ui').remove_highlight()<CR>", keymap_opts)
     else
       -- Add highlight (visual mode)
       vim.api.nvim_buf_set_keymap(ctx.content_buf, "v", keymap,
-        string.format(":lua require('ink.ui').add_highlight('%s')<CR>", color_name), hl_opts)
+        string.format(":lua require('ink.ui').add_highlight('%s')<CR>", color_name), keymap_opts)
     end
   end
 

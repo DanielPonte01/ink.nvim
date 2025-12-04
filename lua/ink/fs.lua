@@ -53,26 +53,8 @@ function M.unzip(epub_path, dest_dir)
   -- -o: overwrite without prompting
   -- -q: quiet mode
   -- -d: destination directory
-  local result = vim.fn.system({"unzip", "-o", "-q", epub_path, "-d", dest_dir})
+  vim.fn.system({"unzip", "-o", "-q", epub_path, "-d", dest_dir})
   return vim.v.shell_error == 0
-end
-
--- List files in directory (simple wrapper)
-function M.scandir(directory)
-  -- Use Neovim's built-in readdir function (safer than shell command)
-  local ok, items = pcall(vim.fn.readdir, directory)
-  if not ok then
-    return {}
-  end
-  -- readdir doesn't include . and .. by default, add them for compatibility
-  table.insert(items, 1, ".")
-  table.insert(items, 2, "..")
-  return items
-end
-
--- Join paths
-function M.join(...)
-  return table.concat({...}, "/") -- Simple join, assuming Unix for now
 end
 
 return M

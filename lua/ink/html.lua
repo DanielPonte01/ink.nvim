@@ -154,8 +154,8 @@ function M.parse(content, max_width, class_styles, justify_text)
         pre_lines = {""}
       end
 
-      for i, line in ipairs(pre_lines) do
-        if i > 1 or #current_line == 0 then
+      for idx, line in ipairs(pre_lines) do
+        if idx > 1 or #current_line == 0 then
           -- Add indent for pre blocks
           local indent = get_indent()
           current_line = indent .. line
@@ -183,7 +183,7 @@ function M.parse(content, max_width, class_styles, justify_text)
       table.insert(words, word)
     end
 
-    for i, word in ipairs(words) do
+    for _, word in ipairs(words) do
       -- At start of line, add blockquote/list/dd indent
       if #current_line == 0 then
         local indent = get_indent()
@@ -514,13 +514,7 @@ function M.parse(content, max_width, class_styles, justify_text)
     return merged
   end
 
-  local original_count = #highlights
   highlights = merge_highlights(highlights)
-
-  -- Debug output (optional, can be removed later)
-  if original_count > #highlights then
-    -- print(string.format("Merged %d highlights into %d", original_count, #highlights))
-  end
 
   -- Justify mapping info for user highlights
   local justify_map = {} -- { [line_idx] = word_info_array }
