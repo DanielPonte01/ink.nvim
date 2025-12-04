@@ -64,8 +64,14 @@ function M.parse_css(css_content)
       style.strikethrough = true
     end
 
+    -- Check if class name suggests it's a title
+    -- Common patterns: title, book-title, booktitle, chapter-title, epub-title, etc.
+    if class_name:lower():match("title") then
+      style.is_title = true
+    end
+
     -- Store if we found any relevant styles
-    if style.bold or style.italic or style.underline or style.strikethrough then
+    if style.bold or style.italic or style.underline or style.strikethrough or style.is_title then
       class_styles[class_name] = style
     end
 

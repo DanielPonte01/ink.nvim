@@ -46,12 +46,13 @@ local highlight_map = {
   u = "InkUnderlined"
 }
 
-function M.parse(content, max_width, class_styles)
+function M.parse(content, max_width, class_styles, justify_text)
   local lines = {}
   local highlights = {} -- { {line_idx, col_start, col_end, group}, ... }
   local links = {} -- { {line_idx, col_start, col_end, href}, ... }
   local images = {} -- { {line_idx, col_start, col_end, src}, ... }
   local anchors = {} -- { id = line_idx }
+  local no_justify = {} -- Track lines that should NOT be justified (headings, code, lists, short lines)
 
   local current_line = ""
   local style_stack = {} -- { {tag=, start_col=, href=} }
@@ -60,6 +61,9 @@ function M.parse(content, max_width, class_styles)
   local in_pre = false
   local in_dd = false
   local line_start_indent = 0 -- Track indent at start of current line for wrapping
+  local in_heading = false -- Track if we're in a heading
+  local in_title = false -- Track if we're in a title element
+  local in_head = false -- Track if we're in the <head> section (skip content)
 
   -- Helper to calculate current indentation
   local function get_indent()
@@ -87,7 +91,28 @@ function M.parse(content, max_width, class_styles)
   -- Helper to flush current line
   local function new_line()
     if #current_line > 0 then
+      -- Special handling for title lines - center them
+      if in_title then
+        local text_length = #current_line
+        if text_length < max_width then
+          local padding = math.floor((max_width - text_length) / 2)
+          current_line = string.rep(" ", padding) .. current_line
+        end
+      end
+
       table.insert(lines, current_line)
+
+      -- Mark lines that should NOT be justified
+      local line_idx = #lines
+      if in_heading or in_pre or #list_stack > 0 or in_dd or blockquote_depth > 0 or in_title then
+        no_justify[line_idx] = true
+      end
+
+      -- Apply title highlighting to the entire line
+      if in_title then
+        table.insert(highlights, { line_idx, 0, #current_line, "InkTitle" })
+      end
+
       current_line = ""
       line_start_indent = 0
     elseif #lines == 0 or lines[#lines] ~= "" then
@@ -216,14 +241,16 @@ function M.parse(content, max_width, class_styles)
     local start_tag, end_tag = string.find(content, "<[^>]+>", pos)
 
     if not start_tag then
-      -- No more tags, add remaining text
-      local text = string.sub(content, pos)
-      add_text(decode_entities(text))
+      -- No more tags, add remaining text (skip if in head section, unless in title)
+      if not in_head or in_title then
+        local text = string.sub(content, pos)
+        add_text(decode_entities(text))
+      end
       break
     end
 
-    -- Add text before tag
-    if start_tag > pos then
+    -- Add text before tag (skip if in head section, unless in title)
+    if start_tag > pos and (not in_head or in_title) then
       local text = string.sub(content, pos, start_tag - 1)
       add_text(decode_entities(text))
     end
@@ -265,7 +292,17 @@ function M.parse(content, max_width, class_styles)
          new_line()
       elseif is_closing then
         -- Closing tag
-        if tag_name == "ul" or tag_name == "ol" then
+        if tag_name == "head" then
+          -- End of head section - resume processing content
+          in_head = false
+        elseif tag_name == "title" then
+          -- Closing title tag - display styled regardless of head/body
+          if in_title then
+            new_line() -- Flush the title line while in_title is still true (for centering/highlight)
+            in_title = false
+            new_line() -- Add blank line after title
+          end
+        elseif tag_name == "ul" or tag_name == "ol" then
           -- Pop from list stack
           if #list_stack > 0 then
             table.remove(list_stack)
@@ -289,6 +326,10 @@ function M.parse(content, max_width, class_styles)
         elseif tag_name == "code" and not in_pre then
           -- Inline code closing - add backtick
           current_line = current_line .. "`"
+        elseif tag_name:match("^h[1-6]$") then
+          -- Closing heading tag
+          in_heading = false
+          new_line()
         elseif block_tags[tag_name] then
           new_line()
         end
@@ -305,9 +346,24 @@ function M.parse(content, max_width, class_styles)
             break
           end
         end
+
+        -- If we're closing a block tag and we're in a title, close the title
+        if in_title and block_tags[tag_name] then
+          in_title = false
+          new_line() -- Add blank line after title
+          new_line()
+        end
       else
         -- Opening tag
-        if tag_name == "ul" then
+        if tag_name == "head" then
+          -- Start of head section - skip most content (except title)
+          in_head = true
+        elseif tag_name == "title" then
+          -- Title tag - display styled even if in head section
+          new_line()
+          new_line() -- Add blank line before title
+          in_title = true
+        elseif tag_name == "ul" then
           new_line()
           table.insert(list_stack, { type = "ul", level = #list_stack + 1 })
         elseif tag_name == "ol" then
@@ -369,6 +425,10 @@ function M.parse(content, max_width, class_styles)
           in_dd = true
         elseif tag_name == "dt" or tag_name == "dl" then
           new_line()
+        elseif tag_name:match("^h[1-6]$") then
+          -- Opening heading tag
+          new_line()
+          in_heading = true
         elseif block_tags[tag_name] then
           new_line()
         end
@@ -389,6 +449,13 @@ function M.parse(content, max_width, class_styles)
             for class_name in class_attr:gmatch("%S+") do
               local style = class_styles[class_name]
               if style then
+                -- Check if this is a title class
+                if style.is_title then
+                  in_title = true
+                  new_line() -- Add blank line before title
+                  new_line()
+                end
+
                 -- Create pseudo-tags for each style found in CSS
                 local css_parser = require("ink.css_parser")
                 local hl_groups = css_parser.get_highlight_groups(style)
@@ -455,13 +522,207 @@ function M.parse(content, max_width, class_styles)
     -- print(string.format("Merged %d highlights into %d", original_count, #highlights))
   end
 
+  -- Justify mapping info for user highlights
+  local justify_map = {} -- { [line_idx] = word_info_array }
+
+  -- Apply text justification if enabled
+  if justify_text then
+    for i, line in ipairs(lines) do
+      -- Skip lines that shouldn't be justified
+      if not no_justify[i] and #line > 0 then
+        -- Only justify lines that are very close to max_width (90%+)
+        -- These are lines that were wrapped to fit, not naturally short lines
+        local min_length = math.floor(max_width * 0.90)
+        if #line >= min_length and #line < max_width then
+          -- Parse words with their original positions
+          local word_info = {} -- { {word=, orig_start=, orig_end=}, ... }
+          local pos = 1
+          while pos <= #line do
+            -- Skip spaces
+            while pos <= #line and line:sub(pos, pos) == " " do
+              pos = pos + 1
+            end
+            if pos > #line then break end
+
+            -- Find word
+            local word_start = pos
+            while pos <= #line and line:sub(pos, pos) ~= " " do
+              pos = pos + 1
+            end
+            local word_end = pos - 1
+            local word = line:sub(word_start, word_end)
+
+            table.insert(word_info, {
+              word = word,
+              orig_start = word_start - 1, -- Convert to 0-based for highlights
+              orig_end = word_end          -- 0-based end (exclusive)
+            })
+          end
+
+          if #word_info > 1 then
+            -- Calculate spaces to distribute
+            local spaces_needed = max_width - #line
+            local gaps = #word_info - 1
+            local base_spaces = 1 -- Minimum one space between words
+            local extra_spaces = math.floor(spaces_needed / gaps)
+            local remainder = spaces_needed % gaps
+
+            -- Rebuild line with distributed spaces and track new positions
+            local new_line = word_info[1].word
+            word_info[1].new_start = 0
+            word_info[1].new_end = #word_info[1].word
+
+            for j = 2, #word_info do
+              local space_count = base_spaces + extra_spaces
+              -- Distribute remainder across first N gaps
+              if j - 1 <= remainder then
+                space_count = space_count + 1
+              end
+              new_line = new_line .. string.rep(" ", space_count)
+              word_info[j].new_start = #new_line
+              new_line = new_line .. word_info[j].word
+              word_info[j].new_end = #new_line
+            end
+
+            -- Store mapping info for this line (for user highlights)
+            justify_map[i] = word_info
+
+            -- Helper function to map old column to new column
+            local function map_column(col)
+              -- Find which word this column belongs to
+              for _, wi in ipairs(word_info) do
+                if col >= wi.orig_start and col < wi.orig_end then
+                  -- Column is inside this word
+                  local offset = col - wi.orig_start
+                  return wi.new_start + offset
+                elseif col == wi.orig_end then
+                  -- Column is at word end (exclusive boundary)
+                  return wi.new_end
+                end
+              end
+              -- Column is in space between words or before first word
+              -- Find nearest word and map to its boundary
+              for idx, wi in ipairs(word_info) do
+                if col < wi.orig_start then
+                  -- Before this word
+                  if idx == 1 then
+                    return col -- Preserve leading space position
+                  else
+                    -- In gap before this word, map to end of previous word's space
+                    return wi.new_start
+                  end
+                end
+              end
+              -- After last word
+              return #new_line
+            end
+
+            -- Update highlights for this line
+            for _, hl in ipairs(highlights) do
+              if hl[1] == i then
+                hl[2] = map_column(hl[2])
+                hl[3] = map_column(hl[3])
+              end
+            end
+
+            -- Update links for this line
+            for _, link in ipairs(links) do
+              if link[1] == i then
+                link[2] = map_column(link[2])
+                link[3] = map_column(link[3])
+              end
+            end
+
+            -- Update images for this line
+            for _, img in ipairs(images) do
+              if img[1] == i then
+                img[2] = map_column(img[2])
+                img[3] = map_column(img[3])
+              end
+            end
+
+            -- Update line
+            lines[i] = new_line
+          end
+        end
+      end
+    end
+  end
+
   return {
     lines = lines,
     highlights = highlights,
     links = links,
     images = images,
-    anchors = anchors
+    anchors = anchors,
+    justify_map = justify_map
   }
+end
+
+-- Forward map: canonical (non-justified) -> justified position
+function M.forward_map_column(word_info, col)
+  if not word_info then return col end
+
+  -- Find which word this column belongs to
+  for _, wi in ipairs(word_info) do
+    if col >= wi.orig_start and col < wi.orig_end then
+      -- Column is inside this word
+      local offset = col - wi.orig_start
+      return wi.new_start + offset
+    elseif col == wi.orig_end then
+      -- Column is at word end (exclusive boundary)
+      return wi.new_end
+    end
+  end
+
+  -- Column is in space between words or before first word
+  for idx, wi in ipairs(word_info) do
+    if col < wi.orig_start then
+      if idx == 1 then
+        return col -- Preserve leading space position
+      else
+        return wi.new_start
+      end
+    end
+  end
+
+  -- After last word
+  local last = word_info[#word_info]
+  return last and last.new_end or col
+end
+
+-- Reverse map: justified -> canonical (non-justified) position
+function M.reverse_map_column(word_info, col)
+  if not word_info then return col end
+
+  -- Find which word this column belongs to (using new positions)
+  for _, wi in ipairs(word_info) do
+    if col >= wi.new_start and col < wi.new_end then
+      -- Column is inside this word
+      local offset = col - wi.new_start
+      return wi.orig_start + offset
+    elseif col == wi.new_end then
+      -- Column is at word end (exclusive boundary)
+      return wi.orig_end
+    end
+  end
+
+  -- Column is in space between words or before first word
+  for idx, wi in ipairs(word_info) do
+    if col < wi.new_start then
+      if idx == 1 then
+        return col -- Preserve leading space position
+      else
+        -- In gap before this word, snap to previous word's end
+        local prev = word_info[idx - 1]
+        return prev.orig_end
+      end
+    end
+  end
+
+  -- After last word
+  local last = word_info[#word_info]
+  return last and last.orig_end or col
 end
 
 return M

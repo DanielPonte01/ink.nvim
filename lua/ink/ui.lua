@@ -23,6 +23,7 @@ local ctx = {
   images = {}, -- Store image data for current chapter
   links = {},   -- Store link data for current chapter
   anchors = {},  -- Store anchor data for current chapter
+  justify_map = {},  -- Store justify mapping for user highlights
   last_statusline_percent = 0  -- Track last percentage to reduce updates
 }
 
@@ -165,7 +166,8 @@ function M.render_chapter(idx, restore_line)
 
   local max_width = M.config.max_width or 120
   local class_styles = ctx.data.class_styles or {}
-  local parsed = html.parse(content, max_width, class_styles)
+  local justify_text = M.config.justify_text or false
+  local parsed = html.parse(content, max_width, class_styles, justify_text)
 
   -- Calculate padding for centering
   local win_width = vim.api.nvim_win_get_width(ctx.content_win)
@@ -173,40 +175,27 @@ function M.render_chapter(idx, restore_line)
   if win_width > max_width then
     padding = math.floor((win_width - max_width) / 2)
   end
-  
-  -- Apply padding
-  if padding > 0 then
-    local pad_str = string.rep(" ", padding)
-    for i, line in ipairs(parsed.lines) do
-      parsed.lines[i] = pad_str .. line
-    end
-    
-    -- Shift highlights
-    for _, hl in ipairs(parsed.highlights) do
-      hl[2] = hl[2] + padding
-      hl[3] = hl[3] + padding
-    end
-    
-    -- Shift links
-    for _, link in ipairs(parsed.links) do
-      link[2] = link[2] + padding
-      link[3] = link[3] + padding
-    end
-    
-    -- Shift images
-    for _, img in ipairs(parsed.images) do
-      img[2] = img[2] + padding
-      img[3] = img[3] + padding
-    end
-  end
-  
-  -- Set text
+
+  -- Set text (no physical padding)
   vim.api.nvim_set_option_value("modifiable", true, { buf = ctx.content_buf })
   vim.api.nvim_buf_set_lines(ctx.content_buf, 0, -1, false, parsed.lines)
   vim.api.nvim_set_option_value("modifiable", false, { buf = ctx.content_buf })
-  
-  -- Clear existing highlights
+
+  -- Clear existing extmarks (highlights and virtual text)
   vim.api.nvim_buf_clear_namespace(ctx.content_buf, ctx.ns_id, 0, -1)
+
+  -- Apply virtual text padding for centering
+  if padding > 0 then
+    local pad_str = string.rep(" ", padding)
+    for i = 1, #parsed.lines do
+      local line_idx = i - 1  -- Convert to 0-based
+      vim.api.nvim_buf_set_extmark(ctx.content_buf, ctx.ns_id, line_idx, 0, {
+        virt_text = {{pad_str, "Normal"}},
+        virt_text_pos = "inline",
+        priority = 100
+      })
+    end
+  end
   
   -- Apply highlights (with validation to prevent out-of-range errors)
   for _, hl in ipairs(parsed.highlights) do
@@ -238,16 +227,24 @@ function M.render_chapter(idx, restore_line)
   ctx.images = parsed.images
   ctx.links = parsed.links
   ctx.anchors = parsed.anchors
+  ctx.justify_map = parsed.justify_map or {}
 
-  -- Apply user highlights
+  -- Apply user highlights (forward-map positions if justify is enabled)
+  local justify_text = M.config.justify_text or false
   local chapter_highlights = user_highlights.get_chapter_highlights(ctx.data.slug, idx)
   for _, hl in ipairs(chapter_highlights) do
     local start_line = hl.start_line - 1  -- Convert to 0-based
     local end_line = hl.end_line - 1
+    local start_col = hl.start_col
+    local end_col = hl.end_col
 
-    -- Apply padding shift to columns
-    local start_col = hl.start_col + padding
-    local end_col = hl.end_col + padding
+    -- Forward-map columns if justify is enabled (stored positions are canonical/non-justified)
+    if justify_text then
+      local start_word_info = ctx.justify_map[hl.start_line]
+      local end_word_info = ctx.justify_map[hl.end_line]
+      start_col = html.forward_map_column(start_word_info, start_col)
+      end_col = html.forward_map_column(end_word_info, end_col)
+    end
 
     -- Validate lines exist
     if start_line >= 0 and start_line < #parsed.lines and end_line >= 0 and end_line < #parsed.lines then
@@ -395,7 +392,8 @@ function M.search_toc(initial_text)
         -- Parse HTML to plain text
         local max_width = M.config.max_width or 120
         local class_styles = ctx.data.class_styles or {}
-        local parsed = html.parse(content, max_width, class_styles)
+        local justify_text = M.config.justify_text or false
+        local parsed = html.parse(content, max_width, class_styles, justify_text)
 
         -- Show parsed lines in preview
         vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, parsed.lines)
@@ -512,6 +510,37 @@ function M.prev_chapter()
   M.render_chapter(ctx.current_chapter_idx - 1)
 end
 
+function M.increase_width()
+  local step = M.config.width_step or 10
+  local current = M.config.max_width or 120
+  M.config.max_width = current + step
+  -- Get current line to restore position
+  local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
+  M.render_chapter(ctx.current_chapter_idx, cursor[1])
+  vim.notify("Width: " .. M.config.max_width, vim.log.levels.INFO)
+end
+
+function M.decrease_width()
+  local step = M.config.width_step or 10
+  local current = M.config.max_width or 120
+  local new_width = math.max(40, current - step)  -- Minimum width of 40
+  M.config.max_width = new_width
+  -- Get current line to restore position
+  local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
+  M.render_chapter(ctx.current_chapter_idx, cursor[1])
+  vim.notify("Width: " .. M.config.max_width, vim.log.levels.INFO)
+end
+
+function M.reset_width()
+  if ctx.default_max_width then
+    M.config.max_width = ctx.default_max_width
+    -- Get current line to restore position
+    local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
+    M.render_chapter(ctx.current_chapter_idx, cursor[1])
+    vim.notify("Width reset: " .. M.config.max_width, vim.log.levels.INFO)
+  end
+end
+
 function M.handle_enter()
   local cursor = vim.api.nvim_win_get_cursor(0)
   local line = cursor[1]
@@ -578,36 +607,25 @@ function M.add_highlight(color)
   local end_line = end_pos[2]
   local end_col = end_pos[3]  -- Already exclusive
 
-  -- Calculate window padding to adjust positions back
-  local win_width = vim.api.nvim_win_get_width(ctx.content_win)
-  local max_width = M.config.max_width or 120
-  local padding = 0
-  if win_width > max_width then
-    padding = math.floor((win_width - max_width) / 2)
+  -- Reverse-map columns if justify is enabled (store canonical/non-justified positions)
+  local justify_text = M.config.justify_text or false
+  local stored_start_col = start_col
+  local stored_end_col = end_col
+
+  if justify_text then
+    local start_word_info = ctx.justify_map[start_line]
+    local end_word_info = ctx.justify_map[end_line]
+    stored_start_col = html.reverse_map_column(start_word_info, start_col)
+    stored_end_col = html.reverse_map_column(end_word_info, end_col)
   end
 
-  -- Store highlight with positions adjusted for padding (unpadded positions)
-  -- Clamp to ensure we don't highlight padding area
-  local adjusted_start_col = math.max(0, start_col - padding)
-  local adjusted_end_col = math.max(0, end_col - padding)
-
-  -- If the selection starts in the padding area, move it to the start of actual content
-  if start_col < padding then
-    adjusted_start_col = 0
-  end
-
-  -- Skip if the entire selection is in the padding area
-  if end_col <= padding then
-    vim.notify("Selection is in padding area, no highlight added", vim.log.levels.WARN)
-    return
-  end
-
+  -- Store highlight (positions stored in canonical/non-justified form)
   local highlight = {
     chapter = ctx.current_chapter_idx,
     start_line = start_line,
-    start_col = adjusted_start_col,
+    start_col = stored_start_col,
     end_line = end_line,
-    end_col = adjusted_end_col,
+    end_col = stored_end_col,
     color = color
   }
 
@@ -639,18 +657,16 @@ function M.remove_highlight()
   local line = cursor[1]
   local col = cursor[2]
 
-  -- Calculate window padding to adjust positions
-  local win_width = vim.api.nvim_win_get_width(ctx.content_win)
-  local max_width = M.config.max_width or 120
-  local padding = 0
-  if win_width > max_width then
-    padding = math.floor((win_width - max_width) / 2)
+  -- Reverse-map column if justify is enabled (stored positions are canonical/non-justified)
+  local lookup_col = col
+  local justify_text = M.config.justify_text or false
+  if justify_text then
+    local word_info = ctx.justify_map[line]
+    lookup_col = html.reverse_map_column(word_info, col)
   end
 
-  -- Adjust for padding (convert to unpadded position)
-  local adjusted_col = col - padding
-
-  local removed = user_highlights.remove_highlight(ctx.data.slug, ctx.current_chapter_idx, line, adjusted_col)
+  -- Remove highlight using canonical position
+  local removed = user_highlights.remove_highlight(ctx.data.slug, ctx.current_chapter_idx, line, lookup_col)
 
   -- Re-render to remove the highlight
   M.render_chapter(ctx.current_chapter_idx, line)
@@ -686,10 +702,25 @@ function M.setup_keymaps(buf)
   if keymaps.search_content then
     vim.api.nvim_buf_set_keymap(buf, "n", keymaps.search_content, ":lua require('ink.ui').search_content()<CR>", opts)
   end
+
+  if keymaps.width_increase then
+    vim.api.nvim_buf_set_keymap(buf, "n", keymaps.width_increase, ":lua require('ink.ui').increase_width()<CR>", opts)
+  end
+
+  if keymaps.width_decrease then
+    vim.api.nvim_buf_set_keymap(buf, "n", keymaps.width_decrease, ":lua require('ink.ui').decrease_width()<CR>", opts)
+  end
+
+  if keymaps.width_reset then
+    vim.api.nvim_buf_set_keymap(buf, "n", keymaps.width_reset, ":lua require('ink.ui').reset_width()<CR>", opts)
+  end
 end
 
 function M.open_book(epub_data)
   ctx.data = epub_data
+
+  -- Store default width to restore on close
+  ctx.default_max_width = M.config.max_width
 
   -- Helper function to find buffer by name
   local function find_buf_by_name(name)
@@ -737,13 +768,18 @@ function M.open_book(epub_data)
   -- Render TOC
   M.render_toc()
   M.toggle_toc() -- Open TOC by default
-  
+
   -- Restore state or start at 1
   local saved = state.load(epub_data.slug)
   if saved then
     M.render_chapter(saved.chapter, saved.line)
+    -- If we have saved state, user is returning - focus on content to continue reading
+    if ctx.content_win and vim.api.nvim_win_is_valid(ctx.content_win) then
+      vim.api.nvim_set_current_win(ctx.content_win)
+    end
   else
     M.render_chapter(1)
+    -- First time opening - leave cursor in TOC to browse chapters
   end
   
   -- Keymaps
@@ -816,6 +852,17 @@ function M.open_book(epub_data)
       if math.abs(percent - ctx.last_statusline_percent) >= 10 then
         ctx.last_statusline_percent = percent
         update_statusline()
+      end
+    end,
+  })
+
+  -- Reset width to default when buffer is closed
+  vim.api.nvim_create_autocmd("BufDelete", {
+    group = augroup,
+    buffer = ctx.content_buf,
+    callback = function()
+      if ctx.default_max_width then
+        M.config.max_width = ctx.default_max_width
       end
     end,
   })

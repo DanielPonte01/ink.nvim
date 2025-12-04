@@ -6,6 +6,7 @@ local M = {}
 local default_config = {
   focused_mode = true,
   image_open = true,
+  justify_text = false,  -- Enable text justification (adds spaces between words, affects copying)
   keymaps = {
     next_chapter = "]c",
     prev_chapter = "[c",
@@ -13,9 +14,13 @@ local default_config = {
     activate = "<CR>",
     search_toc = "<leader>pit",
     search_content = "<leader>pif",
-    search_mode_toggle = "<C-f>"  -- Toggle between TOC and content search
+    search_mode_toggle = "<C-f>",  -- Toggle between TOC and content search
+    width_increase = "<leader>+",
+    width_decrease = "<leader>-",
+    width_reset = "<leader>="
   },
   max_width = 120,
+  width_step = 10,  -- How much to change width per keypress
   highlight_colors = {
     yellow = { bg = "#f9e2af", fg = "#000000" },
     green = { bg = "#a6e3a1", fg = "#000000" },
