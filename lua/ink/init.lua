@@ -12,12 +12,15 @@ local default_config = {
     prev_chapter = "[c",
     toggle_toc = "<leader>t",
     activate = "<CR>",
+    jump_to_link = "g<CR>",  -- Jump to link target (footnotes, cross-references)
     search_toc = "<leader>pit",
     search_content = "<leader>pif",
     search_mode_toggle = "<C-f>",  -- Toggle between TOC and content search
     width_increase = "<leader>+",
     width_decrease = "<leader>-",
-    width_reset = "<leader>="
+    width_reset = "<leader>=",
+    library = "<leader>eL",  -- Open library
+    last_book = "<leader>el"  -- Open last book
   },
   max_width = 120,
   width_step = 10,  -- How much to change width per keypress
@@ -108,6 +111,34 @@ function M.setup(opts)
     nargs = 1,
     complete = "file"
   })
+
+  -- Create Library command
+  vim.api.nvim_create_user_command("InkLibrary", function()
+    ui.show_library()
+  end, {})
+
+  -- Create Last Book command
+  vim.api.nvim_create_user_command("InkLast", function()
+    ui.open_last_book()
+  end, {})
+
+  -- Create Edit Library command (opens library.json for manual editing)
+  vim.api.nvim_create_user_command("InkEditLibrary", function()
+    local library_path = vim.fn.stdpath("data") .. "/ink.nvim/library.json"
+    vim.cmd("edit " .. library_path)
+  end, {})
+
+  -- Global keymaps for library features
+  local keymaps = M.config.keymaps
+  local opts = { noremap = true, silent = true }
+
+  if keymaps.library then
+    vim.api.nvim_set_keymap("n", keymaps.library, ":InkLibrary<CR>", opts)
+  end
+
+  if keymaps.last_book then
+    vim.api.nvim_set_keymap("n", keymaps.last_book, ":InkLast<CR>", opts)
+  end
 end
 
 return M

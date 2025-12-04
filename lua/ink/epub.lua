@@ -37,6 +37,9 @@ local function validate_path(path, base_dir)
 end
 
 function M.open(epub_path)
+  -- Convert to absolute path for consistent storage (works on Unix and Windows)
+  epub_path = vim.fn.fnamemodify(epub_path, ":p")
+
   if not fs.exists(epub_path) then
     error("File not found: " .. epub_path)
   end
@@ -113,8 +116,25 @@ function M.open(epub_path)
     end
   end
 
-  -- Parse Metadata (Title)
+  -- Parse Metadata (Title, Author, Language, Date, Description)
   local title = get_tag_content(opf_content, "dc:title") or slug
+  local author = get_tag_content(opf_content, "dc:creator") or "Unknown"
+  local language = get_tag_content(opf_content, "dc:language") or nil
+  local date = get_tag_content(opf_content, "dc:date") or nil
+  local description = get_tag_content(opf_content, "dc:description") or nil
+
+  -- Clean up date (extract just the year if full date)
+  if date then
+    local year = date:match("^(%d%d%d%d)")
+    if year then
+      date = year
+    end
+  end
+
+  -- Clean up description (remove HTML tags if present)
+  if description then
+    description = description:gsub("<[^>]+>", ""):gsub("%s+", " "):match("^%s*(.-)%s*$")
+  end
 
   -- 3. TOC (NCX or NAV)
   -- Try to find TOC item in manifest
@@ -264,12 +284,17 @@ function M.open(epub_path)
 
   return {
     title = title,
+    author = author,
+    language = language,
+    date = date,
+    description = description,
     spine = spine, -- List of { href=... }
     toc = toc,     -- List of { label=..., href=... }
     base_dir = opf_dir,
     slug = slug,
     cache_dir = cache_dir,
-    class_styles = class_styles  -- CSS class to style mapping
+    class_styles = class_styles,  -- CSS class to style mapping
+    path = epub_path  -- Original EPUB file path for library
   }
 end
 

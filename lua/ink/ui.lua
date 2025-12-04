@@ -2,6 +2,7 @@ local html = require("ink.html")
 local fs = require("ink.fs")
 local state = require("ink.state")
 local user_highlights = require("ink.user_highlights")
+local library = require("ink.library")
 
 local M = {
   config = { max_width = 120 }
@@ -82,6 +83,209 @@ local function open_image(src)
   if job_id <= 0 then
     vim.notify("Failed to start image viewer", vim.log.levels.ERROR)
   end
+end
+
+-- Helper to show footnote in floating window
+local function show_footnote_preview(anchor_id)
+  local anchor_line = ctx.anchors[anchor_id]
+  if not anchor_line then
+    vim.notify("Footnote not found: " .. anchor_id, vim.log.levels.WARN)
+    return false
+  end
+
+  -- Get buffer lines starting from anchor
+  local total_lines = vim.api.nvim_buf_line_count(ctx.content_buf)
+  local max_preview_lines = 15
+  local end_line = math.min(anchor_line + max_preview_lines - 1, total_lines)
+
+  local lines = vim.api.nvim_buf_get_lines(ctx.content_buf, anchor_line - 1, end_line, false)
+
+  -- Trim empty lines from start and end
+  while #lines > 0 and lines[1]:match("^%s*$") do
+    table.remove(lines, 1)
+  end
+  while #lines > 0 and lines[#lines]:match("^%s*$") do
+    table.remove(lines)
+  end
+
+  -- Find where footnote ends (next blank line or reasonable cutoff)
+  local footnote_lines = {}
+  local found_content = false
+  for i, line in ipairs(lines) do
+    -- Skip leading empty lines
+    if not found_content and line:match("^%s*$") then
+      goto continue
+    end
+    found_content = true
+
+    -- Stop at empty line after content (end of footnote)
+    if found_content and line:match("^%s*$") then
+      break
+    end
+
+    -- Trim leading/trailing whitespace for display
+    table.insert(footnote_lines, line:match("^%s*(.-)%s*$"))
+
+    ::continue::
+  end
+
+  if #footnote_lines == 0 then
+    vim.notify("Empty footnote", vim.log.levels.WARN)
+    return false
+  end
+
+  -- Calculate window dimensions
+  local max_width = 60
+  local width = 0
+  for _, line in ipairs(footnote_lines) do
+    width = math.max(width, #line)
+  end
+  width = math.min(width + 2, max_width)  -- Add padding, cap at max
+
+  -- Wrap long lines
+  local wrapped_lines = {}
+  for _, line in ipairs(footnote_lines) do
+    if #line > width - 2 then
+      -- Simple word wrap
+      local current = ""
+      for word in line:gmatch("%S+") do
+        if #current + #word + 1 > width - 2 then
+          if #current > 0 then
+            table.insert(wrapped_lines, current)
+          end
+          current = word
+        else
+          if #current == "" then
+            current = word
+          else
+            current = current .. " " .. word
+          end
+        end
+      end
+      if #current > 0 then
+        table.insert(wrapped_lines, current)
+      end
+    else
+      table.insert(wrapped_lines, line)
+    end
+  end
+
+  local height = math.min(#wrapped_lines, 10)
+
+  -- Create floating window
+  local float_buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(float_buf, 0, -1, false, wrapped_lines)
+  vim.api.nvim_set_option_value("modifiable", false, { buf = float_buf })
+  vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = float_buf })
+
+  -- Position near cursor
+  local win_opts = {
+    relative = "cursor",
+    row = 1,
+    col = 0,
+    width = width,
+    height = height,
+    style = "minimal",
+    border = "rounded",
+    title = " Footnote ",
+    title_pos = "center",
+  }
+
+  local float_win = vim.api.nvim_open_win(float_buf, false, win_opts)
+  vim.api.nvim_set_option_value("winblend", 0, { win = float_win })
+  vim.api.nvim_set_option_value("winhighlight", "Normal:NormalFloat,FloatBorder:FloatBorder", { win = float_win })
+
+  -- Function to close the floating window and clean up
+  local function close_float()
+    if vim.api.nvim_win_is_valid(float_win) then
+      vim.api.nvim_win_close(float_win, true)
+    end
+    -- Remove keymaps
+    pcall(vim.keymap.del, "n", "q", { buffer = ctx.content_buf })
+    pcall(vim.keymap.del, "n", "<Esc>", { buffer = ctx.content_buf })
+  end
+
+  -- Close on cursor move or key press
+  vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI", "BufLeave", "InsertEnter" }, {
+    callback = function()
+      close_float()
+      return true  -- Delete this autocmd
+    end,
+    buffer = ctx.content_buf,
+  })
+
+  -- Also close on q or Escape
+  vim.keymap.set("n", "q", close_float, { buffer = ctx.content_buf })
+  vim.keymap.set("n", "<Esc>", close_float, { buffer = ctx.content_buf })
+
+  return true
+end
+
+-- Helper to find link at cursor position
+local function get_link_at_cursor(line, col)
+  for _, link in ipairs(ctx.links) do
+    if link[1] == line and col >= link[2] and col < link[3] then
+      return link[4]  -- Return href
+    end
+  end
+  return nil
+end
+
+-- Jump to link target (for Shift+Enter navigation)
+local function jump_to_link()
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local line = cursor[1]
+  local col = cursor[2]
+  local buf = vim.api.nvim_get_current_buf()
+
+  if buf ~= ctx.content_buf then
+    return
+  end
+
+  local href = get_link_at_cursor(line, col)
+  if not href then
+    vim.notify("No link at cursor", vim.log.levels.INFO)
+    return
+  end
+
+  -- Check if it's an internal anchor
+  local anchor = href:match("^#(.+)$")
+  if anchor then
+    local anchor_line = ctx.anchors[anchor]
+    if anchor_line then
+      vim.api.nvim_win_set_cursor(ctx.content_win, {anchor_line, 0})
+      -- Center the view on the target
+      vim.cmd("normal! zz")
+      return
+    else
+      vim.notify("Anchor not found: " .. anchor, vim.log.levels.WARN)
+      return
+    end
+  end
+
+  -- Cross-chapter link
+  local target_href = href:match("^([^#]+)") or href
+  local target_anchor = href:match("#(.+)$")
+
+  for i, spine_item in ipairs(ctx.data.spine) do
+    local spine_filename = spine_item.href:match("([^/]+)$")
+    local target_filename = target_href:match("([^/]+)$")
+    if spine_filename == target_filename then
+      M.render_chapter(i)
+      if target_anchor and ctx.anchors[target_anchor] then
+        vim.api.nvim_win_set_cursor(ctx.content_win, {ctx.anchors[target_anchor], 0})
+        vim.cmd("normal! zz")
+      end
+      return
+    end
+  end
+
+  vim.notify("Link target not found: " .. href, vim.log.levels.WARN)
+end
+
+-- Expose jump_to_link for keymap
+M.jump_to_link = function()
+  jump_to_link()
 end
 
 local function update_statusline()
@@ -279,6 +483,9 @@ function M.render_chapter(idx, restore_line)
   
   -- Save state
   state.save(ctx.data.slug, { chapter = idx, line = restore_line or 1 })
+
+  -- Update library progress
+  library.update_progress(ctx.data.slug, idx, #ctx.data.spine)
 end
 
 function M.render_toc()
@@ -544,8 +751,9 @@ end
 function M.handle_enter()
   local cursor = vim.api.nvim_win_get_cursor(0)
   local line = cursor[1]
+  local col = cursor[2]
   local buf = vim.api.nvim_get_current_buf()
-  
+
   if buf == ctx.toc_buf then
     -- Jump to chapter from TOC
     local toc_item = ctx.data.toc[line]
@@ -553,14 +761,14 @@ function M.handle_enter()
       -- Normalize href (remove anchor)
       local target_href = toc_item.href:match("^([^#]+)") or toc_item.href
       local anchor = toc_item.href:match("#(.+)$")
-      
+
       for i, spine_item in ipairs(ctx.data.spine) do
         if spine_item.href == target_href then
           M.render_chapter(i)
           -- Switch focus to content window
           if ctx.content_win and vim.api.nvim_win_is_valid(ctx.content_win) then
             vim.api.nvim_set_current_win(ctx.content_win)
-            
+
             -- Jump to anchor if present
             if anchor and ctx.anchors[anchor] then
                vim.api.nvim_win_set_cursor(ctx.content_win, {ctx.anchors[anchor], 0})
@@ -571,13 +779,46 @@ function M.handle_enter()
       end
     end
   elseif buf == ctx.content_buf then
-    -- Check for image
+    -- Check for image first
     for _, img in ipairs(ctx.images) do
-      -- Check if cursor is on the image line
       if img[1] == line then
         open_image(img[4])
         return
       end
+    end
+
+    -- Check for link at cursor
+    local href = get_link_at_cursor(line, col)
+    if href then
+      -- Check if it's an internal anchor (footnote)
+      local anchor = href:match("^#(.+)$")
+      if anchor then
+        -- Internal link - show footnote preview
+        show_footnote_preview(anchor)
+        return
+      end
+
+      -- External or cross-chapter link - could handle differently
+      -- For now, try to navigate if it's to another chapter
+      local target_href = href:match("^([^#]+)") or href
+      local target_anchor = href:match("#(.+)$")
+
+      -- Check if it's a link to another chapter in spine
+      for i, spine_item in ipairs(ctx.data.spine) do
+        -- Match by filename (hrefs might be relative)
+        local spine_filename = spine_item.href:match("([^/]+)$")
+        local target_filename = target_href:match("([^/]+)$")
+        if spine_filename == target_filename then
+          M.render_chapter(i)
+          if target_anchor and ctx.anchors[target_anchor] then
+            vim.api.nvim_win_set_cursor(ctx.content_win, {ctx.anchors[target_anchor], 0})
+          end
+          return
+        end
+      end
+
+      -- Unknown link type
+      vim.notify("Link: " .. href, vim.log.levels.INFO)
     end
   end
 end
@@ -695,6 +936,10 @@ function M.setup_keymaps(buf)
     vim.api.nvim_buf_set_keymap(buf, "n", keymaps.activate, ":lua require('ink.ui').handle_enter()<CR>", opts)
   end
 
+  -- Jump to link target (g + Enter by default)
+  local jump_key = keymaps.jump_to_link or "g<CR>"
+  vim.api.nvim_buf_set_keymap(buf, "n", jump_key, ":lua require('ink.ui').jump_to_link()<CR>", opts)
+
   if keymaps.search_toc then
     vim.api.nvim_buf_set_keymap(buf, "n", keymaps.search_toc, ":lua require('ink.ui').search_toc()<CR>", opts)
   end
@@ -718,6 +963,19 @@ end
 
 function M.open_book(epub_data)
   ctx.data = epub_data
+
+  -- Register book in library
+  library.add_book({
+    slug = epub_data.slug,
+    title = epub_data.title,
+    author = epub_data.author,
+    language = epub_data.language,
+    date = epub_data.date,
+    description = epub_data.description,
+    path = epub_data.path,
+    chapter = 1,
+    total_chapters = #epub_data.spine
+  })
 
   -- Store default width to restore on close
   ctx.default_max_width = M.config.max_width
@@ -866,6 +1124,278 @@ function M.open_book(epub_data)
       end
     end,
   })
+end
+
+-- Open last book from library
+function M.open_last_book()
+  local last_path = library.get_last_book_path()
+  if not last_path then
+    vim.notify("No books in library yet", vim.log.levels.INFO)
+    return
+  end
+
+  if not fs.exists(last_path) then
+    vim.notify("Last book not found: " .. last_path, vim.log.levels.ERROR)
+    return
+  end
+
+  -- Open the book using the main epub module
+  local epub = require("ink.epub")
+  local ok, epub_data = pcall(epub.open, last_path)
+  if not ok then
+    vim.notify("Failed to open book: " .. tostring(epub_data), vim.log.levels.ERROR)
+    return
+  end
+
+  M.open_book(epub_data)
+end
+
+-- Show library with Telescope or fallback
+function M.show_library()
+  local books = library.get_books()
+
+  if #books == 0 then
+    vim.notify("Library is empty. Open a book with :InkOpen first.", vim.log.levels.INFO)
+    return
+  end
+
+  -- Try to use Telescope
+  local ok_telescope, _ = pcall(require, 'telescope')
+  if ok_telescope then
+    M.show_library_telescope(books)
+  else
+    M.show_library_floating(books)
+  end
+end
+
+-- Telescope-based library picker
+function M.show_library_telescope(books)
+  local pickers = require('telescope.pickers')
+  local finders = require('telescope.finders')
+  local conf = require('telescope.config')
+  local actions = require('telescope.actions')
+  local action_state = require('telescope.actions.state')
+  local previewers = require('telescope.previewers')
+
+  local entries = {}
+  for _, book in ipairs(books) do
+    local progress = math.floor((book.chapter / book.total_chapters) * 100)
+    local last_opened = library.format_last_opened(book.last_opened)
+    local author = book.author or "Unknown"
+
+    table.insert(entries, {
+      display = string.format("%-30s │ %-20s │ %3d%% │ %s", book.title:sub(1, 30), author:sub(1, 20), progress, last_opened),
+      ordinal = book.title .. " " .. author,  -- Search by title AND author
+      book = book,
+      progress = progress,
+      last_opened = last_opened,
+      author = author
+    })
+  end
+
+  pickers.new({}, {
+    prompt_title = "Library (C-d: delete, C-e: edit file)",
+    finder = finders.new_table({
+      results = entries,
+      entry_maker = function(entry)
+        return {
+          value = entry,
+          display = entry.display,
+          ordinal = entry.ordinal,
+          book = entry.book
+        }
+      end
+    }),
+    previewer = previewers.new_buffer_previewer({
+      title = "Book Info",
+      define_preview = function(self, entry)
+        local book = entry.book
+        local lines = {
+          "Title: " .. book.title,
+          "Author: " .. (book.author or "Unknown"),
+        }
+
+        -- Add optional metadata
+        if book.language then
+          table.insert(lines, "Language: " .. book.language)
+        end
+        if book.date then
+          table.insert(lines, "Date: " .. book.date)
+        end
+
+        table.insert(lines, "")
+        table.insert(lines, "Progress: " .. entry.value.progress .. "% (Chapter " .. book.chapter .. "/" .. book.total_chapters .. ")")
+        table.insert(lines, "Last opened: " .. entry.value.last_opened)
+
+        -- Add description if available
+        if book.description and book.description ~= "" then
+          table.insert(lines, "")
+          table.insert(lines, "Description:")
+          -- Word wrap description at ~60 chars
+          local desc = book.description
+          local wrap_width = 60
+          while #desc > 0 do
+            if #desc <= wrap_width then
+              table.insert(lines, "  " .. desc)
+              break
+            else
+              local break_pos = desc:sub(1, wrap_width):match(".*()%s") or wrap_width
+              table.insert(lines, "  " .. desc:sub(1, break_pos))
+              desc = desc:sub(break_pos + 1):match("^%s*(.*)$") or ""
+            end
+          end
+        end
+
+        table.insert(lines, "")
+        table.insert(lines, "Path: " .. book.path)
+
+        vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
+      end
+    }),
+    sorter = conf.values.generic_sorter({}),
+    attach_mappings = function(prompt_bufnr, map)
+      actions.select_default:replace(function()
+        local selection = action_state.get_selected_entry()
+        actions.close(prompt_bufnr)
+
+        local book = selection.book
+        if not fs.exists(book.path) then
+          vim.notify("Book not found: " .. book.path, vim.log.levels.ERROR)
+          return
+        end
+
+        local epub = require("ink.epub")
+        local ok, epub_data = pcall(epub.open, book.path)
+        if ok then
+          M.open_book(epub_data)
+        else
+          vim.notify("Failed to open: " .. tostring(epub_data), vim.log.levels.ERROR)
+        end
+      end)
+
+      -- Delete book from library with <C-d>
+      map('i', '<C-d>', function()
+        local selection = action_state.get_selected_entry()
+        if selection then
+          library.remove_book(selection.book.slug)
+          vim.notify("Removed: " .. selection.book.title, vim.log.levels.INFO)
+          -- Refresh picker
+          actions.close(prompt_bufnr)
+          vim.schedule(function()
+            M.show_library()
+          end)
+        end
+      end)
+
+      -- Edit library.json with <C-e>
+      map('i', '<C-e>', function()
+        actions.close(prompt_bufnr)
+        vim.cmd("InkEditLibrary")
+      end)
+
+      return true
+    end
+  }):find()
+end
+
+-- Floating window fallback for library
+function M.show_library_floating(books)
+  local lines = {}
+  local book_map = {}  -- line number -> book
+
+  table.insert(lines, "Library (press Enter to open, q to close)")
+  table.insert(lines, string.rep("─", 75))
+
+  for i, book in ipairs(books) do
+    local progress = math.floor((book.chapter / book.total_chapters) * 100)
+    local last_opened = library.format_last_opened(book.last_opened)
+    local author = book.author or "Unknown"
+    local line = string.format(" %d. %-25s │ %-15s │ %3d%% │ %s", i, book.title:sub(1, 25), author:sub(1, 15), progress, last_opened)
+    table.insert(lines, line)
+    book_map[#lines] = book
+  end
+
+  table.insert(lines, "")
+  table.insert(lines, " Press Enter to open, d to delete, q to close")
+
+  -- Calculate dimensions
+  local width = 80
+  local height = math.min(#lines, 20)
+
+  -- Create buffer
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
+  vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = buf })
+
+  -- Create floating window centered
+  local win_width = vim.o.columns
+  local win_height = vim.o.lines
+  local row = math.floor((win_height - height) / 2)
+  local col = math.floor((win_width - width) / 2)
+
+  local win = vim.api.nvim_open_win(buf, true, {
+    relative = "editor",
+    row = row,
+    col = col,
+    width = width,
+    height = height,
+    style = "minimal",
+    border = "rounded",
+    title = " Library ",
+    title_pos = "center",
+  })
+
+  -- Keymaps for the floating window
+  local function close_window()
+    if vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_close(win, true)
+    end
+  end
+
+  vim.keymap.set("n", "q", close_window, { buffer = buf })
+  vim.keymap.set("n", "<Esc>", close_window, { buffer = buf })
+
+  vim.keymap.set("n", "<CR>", function()
+    local cursor = vim.api.nvim_win_get_cursor(win)
+    local line_num = cursor[1]
+    local book = book_map[line_num]
+
+    if book then
+      close_window()
+      if not fs.exists(book.path) then
+        vim.notify("Book not found: " .. book.path, vim.log.levels.ERROR)
+        return
+      end
+
+      local epub = require("ink.epub")
+      local ok, epub_data = pcall(epub.open, book.path)
+      if ok then
+        M.open_book(epub_data)
+      else
+        vim.notify("Failed to open: " .. tostring(epub_data), vim.log.levels.ERROR)
+      end
+    end
+  end, { buffer = buf })
+
+  vim.keymap.set("n", "d", function()
+    local cursor = vim.api.nvim_win_get_cursor(win)
+    local line_num = cursor[1]
+    local book = book_map[line_num]
+
+    if book then
+      library.remove_book(book.slug)
+      vim.notify("Removed: " .. book.title, vim.log.levels.INFO)
+      close_window()
+      -- Reopen to refresh
+      vim.schedule(function()
+        M.show_library()
+      end)
+    end
+  end, { buffer = buf })
+
+  -- Position cursor on first book
+  vim.api.nvim_win_set_cursor(win, {3, 0})
 end
 
 return M
