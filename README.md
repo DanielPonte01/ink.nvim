@@ -113,7 +113,7 @@ require("ink").setup({
 
 -- Optional: Add a keymap to quickly open EPUB files
 vim.keymap.set("n", "<leader>eo", ":InkOpen ", { desc = "Open EPUB file" })
-vim.keymap.set("n", "<leader>el", ":InkEditLibrary", { desc = "Edit you library JSON file" })
+vim.keymap.set("n", "<leader>le", ":InkEditLibrary", { desc = "Edit you library JSON file" })
 ```
 
 ## Usage
