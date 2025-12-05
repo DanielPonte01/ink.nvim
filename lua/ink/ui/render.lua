@@ -10,9 +10,9 @@ local parse = require("ink.html.parser")
 
 local M = {}
 
-function M.update_statusline()
-  local ctx = context.ctx
-  if not ctx.content_win or not vim.api.nvim_win_is_valid(ctx.content_win) then return end
+function M.update_statusline(ctx)
+  ctx = ctx or context.current()
+  if not ctx or not ctx.content_win or not vim.api.nvim_win_is_valid(ctx.content_win) then return end
 
   local total = #ctx.data.spine
   local current = ctx.current_chapter_idx
@@ -40,9 +40,9 @@ function M.update_statusline()
   vim.api.nvim_set_option_value("statusline", status, { win = ctx.content_win })
 end
 
-function M.render_chapter(idx, restore_line)
-  local ctx = context.ctx
-  if idx < 1 or idx > #ctx.data.spine then return end
+function M.render_chapter(idx, restore_line, ctx)
+  ctx = ctx or context.current()
+  if not ctx or idx < 1 or idx > #ctx.data.spine then return end
   ctx.current_chapter_idx = idx
   ctx.last_statusline_percent = 0
 
@@ -88,7 +88,7 @@ function M.render_chapter(idx, restore_line)
   vim.api.nvim_buf_set_lines(ctx.content_buf, 0, -1, false, parsed.lines)
   vim.api.nvim_set_option_value("modifiable", false, { buf = ctx.content_buf })
 
-  vim.api.nvim_buf_clear_namespace(ctx.content_buf, ctx.ns_id, 0, -1)
+  vim.api.nvim_buf_clear_namespace(ctx.content_buf, context.ns_id, 0, -1)
 
   for i = 1, #parsed.lines do
     local line_idx = i - 1
@@ -104,7 +104,7 @@ function M.render_chapter(idx, restore_line)
 
     if line_padding > 0 then
       local pad_str = string.rep(" ", line_padding)
-      vim.api.nvim_buf_set_extmark(ctx.content_buf, ctx.ns_id, line_idx, 0, {
+      vim.api.nvim_buf_set_extmark(ctx.content_buf, context.ns_id, line_idx, 0, {
         virt_text = {{pad_str, "Normal"}}, virt_text_pos = "inline", priority = 100
       })
     end
@@ -119,7 +119,7 @@ function M.render_chapter(idx, restore_line)
       start_col = math.min(start_col, line_length)
       end_col = math.min(end_col, line_length)
       if start_col < end_col then
-        vim.api.nvim_buf_set_extmark(ctx.content_buf, ctx.ns_id, line_idx, start_col, {
+        vim.api.nvim_buf_set_extmark(ctx.content_buf, context.ns_id, line_idx, start_col, {
           end_col = end_col, hl_group = hl[4], priority = 1000, hl_mode = "combine"
         })
       end
@@ -143,7 +143,7 @@ function M.render_chapter(idx, restore_line)
       hl._end_line = end_line
       hl._end_col = end_col
       local hl_group = "InkUserHighlight_" .. hl.color
-      vim.api.nvim_buf_set_extmark(ctx.content_buf, ctx.ns_id, start_line - 1, start_col, {
+      vim.api.nvim_buf_set_extmark(ctx.content_buf, context.ns_id, start_line - 1, start_col, {
         end_line = end_line - 1, end_col = end_col, hl_group = hl_group, priority = 2000
       })
     end
@@ -166,13 +166,13 @@ function M.render_chapter(idx, restore_line)
       if line_idx >= 0 and line_idx < #parsed.lines then
         if ctx.note_display_mode == "indicator" then
           for _, note_info in ipairs(notes) do
-            vim.api.nvim_buf_set_extmark(ctx.content_buf, ctx.ns_id, line_idx, note_info.end_col, {
+            vim.api.nvim_buf_set_extmark(ctx.content_buf, context.ns_id, line_idx, note_info.end_col, {
               virt_text = {{"●", "InkNoteIndicator"}}, virt_text_pos = "inline", priority = 3000
             })
           end
         elseif ctx.note_display_mode == "expanded" then
           for _, note_info in ipairs(notes) do
-            vim.api.nvim_buf_set_extmark(ctx.content_buf, ctx.ns_id, line_idx, note_info.end_col, {
+            vim.api.nvim_buf_set_extmark(ctx.content_buf, context.ns_id, line_idx, note_info.end_col, {
               virt_text = {{"●", "InkNoteIndicator"}}, virt_text_pos = "inline", priority = 3000
             })
           end
@@ -186,7 +186,7 @@ function M.render_chapter(idx, restore_line)
             table.insert(virt_lines, {{pad .. bars .. " " .. note_text, "InkNoteText"}})
           end
           if #virt_lines > 0 then
-            vim.api.nvim_buf_set_extmark(ctx.content_buf, ctx.ns_id, line_idx, 0, {
+            vim.api.nvim_buf_set_extmark(ctx.content_buf, context.ns_id, line_idx, 0, {
               virt_lines = virt_lines, virt_lines_above = false, priority = 3000
             })
           end
@@ -202,7 +202,7 @@ function M.render_chapter(idx, restore_line)
     local line_idx = bm.paragraph_line - 1
     if line_idx >= 0 and line_idx < #parsed.lines then
       local pad = string.rep(" ", padding)
-      vim.api.nvim_buf_set_extmark(ctx.content_buf, ctx.ns_id, line_idx, 0, {
+      vim.api.nvim_buf_set_extmark(ctx.content_buf, context.ns_id, line_idx, 0, {
         virt_lines = {{{pad .. bookmark_icon .. " " .. bm.name, "InkBookmark"}}},
         virt_lines_above = true,
         priority = 4000,
@@ -218,13 +218,14 @@ function M.render_chapter(idx, restore_line)
     end
   end
 
-  M.update_statusline()
+  M.update_statusline(ctx)
   state.save(ctx.data.slug, { chapter = idx, line = restore_line or 1 })
   library.update_progress(ctx.data.slug, idx, #ctx.data.spine)
 end
 
-function M.render_toc()
-  local ctx = context.ctx
+function M.render_toc(ctx)
+  ctx = ctx or context.current()
+  if not ctx then return end
   vim.api.nvim_set_option_value("modifiable", true, { buf = ctx.toc_buf })
   local lines = {}
   for _, item in ipairs(ctx.data.toc) do
@@ -235,8 +236,9 @@ function M.render_toc()
   vim.api.nvim_set_option_value("modifiable", false, { buf = ctx.toc_buf })
 end
 
-function M.toggle_toc()
-  local ctx = context.ctx
+function M.toggle_toc(ctx)
+  ctx = ctx or context.current()
+  if not ctx then return end
   if ctx.toc_win and vim.api.nvim_win_is_valid(ctx.toc_win) then
     vim.api.nvim_win_close(ctx.toc_win, true)
     ctx.toc_win = nil
@@ -251,8 +253,9 @@ function M.toggle_toc()
   end
 end
 
-function M.toggle_note_display()
-  local ctx = context.ctx
+function M.toggle_note_display(ctx)
+  ctx = ctx or context.current()
+  if not ctx then return end
   if ctx.note_display_mode == "off" then
     ctx.note_display_mode = "indicator"
   elseif ctx.note_display_mode == "indicator" then
@@ -261,12 +264,13 @@ function M.toggle_note_display()
     ctx.note_display_mode = "off"
   end
   local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
-  M.render_chapter(ctx.current_chapter_idx, cursor[1])
+  M.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
   vim.notify("Note display: " .. ctx.note_display_mode, vim.log.levels.INFO)
 end
 
-function M.show_footnote_preview(anchor_id)
-  local ctx = context.ctx
+function M.show_footnote_preview(anchor_id, ctx)
+  ctx = ctx or context.current()
+  if not ctx then return false end
   local anchor_line = ctx.anchors[anchor_id]
   if not anchor_line then
     vim.notify("Footnote not found: " .. anchor_id, vim.log.levels.WARN)

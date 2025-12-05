@@ -2,26 +2,16 @@ local data = require("ink.bookmarks.data")
 
 local M = {}
 
-function M.get_all()
-  local loaded = data.load()
-  return loaded.bookmarks or {}
-end
-
 function M.get_by_book(slug)
-  local bookmarks = M.get_all()
-  local result = {}
-  for _, bm in ipairs(bookmarks) do
-    if bm.book_slug == slug then
-      table.insert(result, bm)
-    end
-  end
-  table.sort(result, function(a, b)
+  local loaded = data.load(slug)
+  local bookmarks = loaded.bookmarks or {}
+  table.sort(bookmarks, function(a, b)
     if a.chapter ~= b.chapter then
       return a.chapter < b.chapter
     end
     return a.paragraph_line < b.paragraph_line
   end)
-  return result
+  return bookmarks
 end
 
 function M.get_chapter_bookmarks(slug, chapter)
@@ -35,8 +25,8 @@ function M.get_chapter_bookmarks(slug, chapter)
   return result
 end
 
-function M.find_by_id(id)
-  local bookmarks = M.get_all()
+function M.find_by_id(slug, id)
+  local bookmarks = M.get_by_book(slug)
   for _, bm in ipairs(bookmarks) do
     if bm.id == id then
       return bm
@@ -56,8 +46,8 @@ function M.find_at_line(slug, chapter, line)
 end
 
 function M.get_next(slug, current_chapter, current_line)
-  local all_bookmarks = M.get_by_book(slug)
-  for _, bm in ipairs(all_bookmarks) do
+  local bookmarks = M.get_by_book(slug)
+  for _, bm in ipairs(bookmarks) do
     if bm.chapter > current_chapter then
       return bm
     elseif bm.chapter == current_chapter and bm.paragraph_line > current_line then
@@ -68,9 +58,9 @@ function M.get_next(slug, current_chapter, current_line)
 end
 
 function M.get_prev(slug, current_chapter, current_line)
-  local all_bookmarks = M.get_by_book(slug)
+  local bookmarks = M.get_by_book(slug)
   local prev = nil
-  for _, bm in ipairs(all_bookmarks) do
+  for _, bm in ipairs(bookmarks) do
     if bm.chapter < current_chapter then
       prev = bm
     elseif bm.chapter == current_chapter and bm.paragraph_line < current_line then

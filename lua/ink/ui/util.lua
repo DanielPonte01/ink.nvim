@@ -4,10 +4,9 @@ local context = require("ink.ui.context")
 
 local M = {}
 
--- Helper to open image
-function M.open_image(src)
-  local ctx = context.ctx
-  -- Image paths in HTML are relative to the chapter file, not base_dir
+function M.open_image(src, ctx)
+  ctx = ctx or context.current()
+  if not ctx then return end
   local chapter_item = ctx.data.spine[ctx.current_chapter_idx]
   local chapter_path = ctx.data.base_dir .. "/" .. chapter_item.href
   local chapter_dir = vim.fn.fnamemodify(chapter_path, ":h")
@@ -40,7 +39,7 @@ function M.open_image(src)
     return
   end
 
-  local job_id = vim.fn.jobstart(cmd, {
+  vim.fn.jobstart(cmd, {
     detach = true,
     on_exit = function(_, exit_code)
       if exit_code ~= 0 then
@@ -142,8 +141,9 @@ function M.find_text_position(lines, text, context_before, context_after)
   return nil
 end
 
-function M.get_highlight_at_cursor()
-  local ctx = context.ctx
+function M.get_highlight_at_cursor(ctx)
+  ctx = ctx or context.current()
+  if not ctx then return nil end
   local cursor = vim.api.nvim_win_get_cursor(0)
   local line = cursor[1]
   local col = cursor[2]
@@ -165,8 +165,9 @@ function M.get_highlight_at_cursor()
   return nil
 end
 
-function M.get_link_at_cursor(line, col)
-  local ctx = context.ctx
+function M.get_link_at_cursor(line, col, ctx)
+  ctx = ctx or context.current()
+  if not ctx then return nil end
   for _, link in ipairs(ctx.links) do
     if link[1] == line and col >= link[2] and col < link[3] then
       return link[4]

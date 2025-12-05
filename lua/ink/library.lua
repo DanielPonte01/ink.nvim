@@ -1,71 +1,13 @@
 local fs = require("ink.fs")
+local data = require("ink.data")
 
 local M = {}
 
--- Pretty-print JSON encoder
-local function json_pretty_encode(data, indent)
-  indent = indent or 0
-  local spacing = string.rep("  ", indent)
-  local spacing_inner = string.rep("  ", indent + 1)
-
-  if type(data) == "table" then
-    -- Check if array or object
-    local is_array = #data > 0 or next(data) == nil
-    if is_array and #data > 0 then
-      -- Check if it's really an array (sequential numeric keys)
-      for k, _ in pairs(data) do
-        if type(k) ~= "number" then
-          is_array = false
-          break
-        end
-      end
-    end
-
-    if is_array then
-      if #data == 0 then
-        return "[]"
-      end
-      local items = {}
-      for _, v in ipairs(data) do
-        table.insert(items, spacing_inner .. json_pretty_encode(v, indent + 1))
-      end
-      return "[\n" .. table.concat(items, ",\n") .. "\n" .. spacing .. "]"
-    else
-      local items = {}
-      for k, v in pairs(data) do
-        local key = '"' .. tostring(k) .. '"'
-        table.insert(items, spacing_inner .. key .. ": " .. json_pretty_encode(v, indent + 1))
-      end
-      if #items == 0 then
-        return "{}"
-      end
-      -- Sort keys for consistent output
-      table.sort(items)
-      return "{\n" .. table.concat(items, ",\n") .. "\n" .. spacing .. "}"
-    end
-  elseif type(data) == "string" then
-    -- Escape special characters
-    local escaped = data:gsub('\\', '\\\\'):gsub('"', '\\"'):gsub('\n', '\\n'):gsub('\r', '\\r'):gsub('\t', '\\t')
-    return '"' .. escaped .. '"'
-  elseif type(data) == "number" then
-    return tostring(data)
-  elseif type(data) == "boolean" then
-    return data and "true" or "false"
-  elseif data == nil then
-    return "null"
-  else
-    return '"' .. tostring(data) .. '"'
-  end
-end
-
--- Get the library file path
 local function get_library_path()
-  local data_dir = vim.fn.stdpath("data") .. "/ink.nvim"
-  fs.ensure_dir(data_dir)
-  return data_dir .. "/library.json"
+  fs.ensure_dir(data.get_data_dir())
+  return data.get_data_dir() .. "/library.json"
 end
 
--- Load library from disk
 function M.load()
   local path = get_library_path()
 
@@ -78,22 +20,21 @@ function M.load()
     return { books = {}, last_book_path = nil }
   end
 
-  local ok, data = pcall(vim.json.decode, content)
-  if not ok or not data then
+  local ok, lib = pcall(vim.json.decode, content)
+  if not ok or not lib then
     return { books = {}, last_book_path = nil }
   end
 
-  return data
+  return lib
 end
 
--- Save library to disk (pretty-printed for easy manual editing)
 function M.save(library)
   local path = get_library_path()
-  local data = json_pretty_encode(library)
+  local json = data.json_encode(library)
 
   local file = io.open(path, "w")
   if file then
-    file:write(data)
+    file:write(json)
     file:close()
     return true
   end

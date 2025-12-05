@@ -1,8 +1,22 @@
 local bookmarks = require("ink.bookmarks")
 local context = require("ink.ui.context")
 local render = require("ink.ui.render")
+local library = require("ink.library")
 
 local M = {}
+
+-- Get all bookmarks across all books in library
+local function get_all_bookmarks()
+  local all = {}
+  local books = library.get_books()
+  for _, book in ipairs(books) do
+    local book_bm = bookmarks.get_by_book(book.slug)
+    for _, bm in ipairs(book_bm) do
+      table.insert(all, bm)
+    end
+  end
+  return all
+end
 
 local function find_paragraph_line(lines, cursor_line)
   local line_content = lines[cursor_line] or ""
@@ -98,7 +112,8 @@ local function open_bookmark_input(initial_name, callback)
 end
 
 function M.add_bookmark()
-  local ctx = context.ctx
+  local ctx = context.current()
+  if not ctx then return end
   local buf = vim.api.nvim_get_current_buf()
   if buf ~= ctx.content_buf then
     vim.notify("Bookmarks can only be added in the content buffer", vim.log.levels.WARN)
@@ -116,8 +131,8 @@ function M.add_bookmark()
     -- Edit existing bookmark
     open_bookmark_input(existing.name, function(name)
       if name and name ~= "" then
-        bookmarks.update(existing.id, name)
-        render.render_chapter(ctx.current_chapter_idx, cursor_line)
+        bookmarks.update(ctx.data.slug, existing.id, name)
+        render.render_chapter(ctx.current_chapter_idx, cursor_line, ctx)
         vim.notify("Bookmark updated", vim.log.levels.INFO)
       end
     end)
@@ -137,15 +152,16 @@ function M.add_bookmark()
         paragraph_line = paragraph_line,
         text_preview = preview,
       }
-      bookmarks.add(bookmark)
-      render.render_chapter(ctx.current_chapter_idx, cursor_line)
+      bookmarks.add(ctx.data.slug, bookmark)
+      render.render_chapter(ctx.current_chapter_idx, cursor_line, ctx)
       vim.notify("Bookmark added", vim.log.levels.INFO)
     end
   end)
 end
 
 function M.remove_bookmark()
-  local ctx = context.ctx
+  local ctx = context.current()
+  if not ctx then return end
   local buf = vim.api.nvim_get_current_buf()
   if buf ~= ctx.content_buf then
     vim.notify("Bookmarks can only be removed in the content buffer", vim.log.levels.WARN)
@@ -165,14 +181,14 @@ function M.remove_bookmark()
     return
   end
 
-  bookmarks.remove(found.id)
-  render.render_chapter(ctx.current_chapter_idx, cursor_line)
+  bookmarks.remove(ctx.data.slug, found.id)
+  render.render_chapter(ctx.current_chapter_idx, cursor_line, ctx)
   vim.notify("Bookmark removed", vim.log.levels.INFO)
 end
 
 function M.goto_next()
-  local ctx = context.ctx
-  if not ctx.data then
+  local ctx = context.current()
+  if not ctx or not ctx.data then
     vim.notify("No book open", vim.log.levels.WARN)
     return
   end
@@ -186,15 +202,15 @@ function M.goto_next()
   end
 
   if next_bm.chapter ~= ctx.current_chapter_idx then
-    render.render_chapter(next_bm.chapter, next_bm.paragraph_line)
+    render.render_chapter(next_bm.chapter, next_bm.paragraph_line, ctx)
   else
     vim.api.nvim_win_set_cursor(ctx.content_win, {next_bm.paragraph_line, 0})
   end
 end
 
 function M.goto_prev()
-  local ctx = context.ctx
-  if not ctx.data then
+  local ctx = context.current()
+  if not ctx or not ctx.data then
     vim.notify("No book open", vim.log.levels.WARN)
     return
   end
@@ -208,7 +224,7 @@ function M.goto_prev()
   end
 
   if prev_bm.chapter ~= ctx.current_chapter_idx then
-    render.render_chapter(prev_bm.chapter, prev_bm.paragraph_line)
+    render.render_chapter(prev_bm.chapter, prev_bm.paragraph_line, ctx)
   else
     vim.api.nvim_win_set_cursor(ctx.content_win, {prev_bm.paragraph_line, 0})
   end
@@ -228,9 +244,9 @@ function M.show_bookmarks_telescope(book_slug, switch_callback)
   local action_state = require("telescope.actions.state")
   local previewers = require("telescope.previewers")
 
-  local all_bookmarks = book_slug and bookmarks.get_by_book(book_slug) or bookmarks.get_all()
+  local all_bookmarks = book_slug and bookmarks.get_by_book(book_slug) or get_all_bookmarks()
   local is_local = book_slug ~= nil
-  local title = is_local and "Bookmarks Book (C-d delete, C-f toggle all, C-b goto Library)" or "Bookmarks All(C-d delete, C-f toggle book, C-b goto Library)"
+  local title = is_local and "Bookmarks Book (C-d delete, C-f toggle all, C-b goto Library)" or "Bookmarks All (C-d delete, C-f toggle book, C-b goto Library)"
 
   if #all_bookmarks == 0 then
     vim.notify("No bookmarks found", vim.log.levels.INFO)
@@ -281,7 +297,7 @@ function M.show_bookmarks_telescope(book_slug, switch_callback)
       -- Toggle local/global
       local function toggle_scope()
         actions.close(prompt_bufnr)
-        local ctx = context.ctx
+        local ctx = context.current()
         if is_local then
           -- Go to global
           M.show_bookmarks_telescope(nil, switch_callback)
@@ -298,16 +314,6 @@ function M.show_bookmarks_telescope(book_slug, switch_callback)
       map("i", "<C-f>", toggle_scope)
       map("n", "<C-f>", toggle_scope)
 
-      -- Edit bookmarks file
-      map("i", "<C-e>", function()
-        actions.close(prompt_bufnr)
-        vim.cmd("edit " .. bookmarks.get_file_path())
-      end)
-      map("n", "<C-e>", function()
-        actions.close(prompt_bufnr)
-        vim.cmd("edit " .. bookmarks.get_file_path())
-      end)
-
       -- Switch to library
       map("i", "<C-b>", function()
         actions.close(prompt_bufnr)
@@ -322,7 +328,7 @@ function M.show_bookmarks_telescope(book_slug, switch_callback)
       map("i", "<C-d>", function()
         local entry = action_state.get_selected_entry()
         if entry then
-          bookmarks.remove(entry.value.id)
+          bookmarks.remove(entry.value.book_slug, entry.value.id)
           actions.close(prompt_bufnr)
           M.show_bookmarks_telescope(book_slug, switch_callback)
         end
@@ -330,7 +336,7 @@ function M.show_bookmarks_telescope(book_slug, switch_callback)
       map("n", "<C-d>", function()
         local entry = action_state.get_selected_entry()
         if entry then
-          bookmarks.remove(entry.value.id)
+          bookmarks.remove(entry.value.book_slug, entry.value.id)
           actions.close(prompt_bufnr)
           M.show_bookmarks_telescope(book_slug, switch_callback)
         end
@@ -342,7 +348,7 @@ function M.show_bookmarks_telescope(book_slug, switch_callback)
 end
 
 function M.show_bookmarks_floating(book_slug)
-  local all_bookmarks = book_slug and bookmarks.get_by_book(book_slug) or bookmarks.get_all()
+  local all_bookmarks = book_slug and bookmarks.get_by_book(book_slug) or get_all_bookmarks()
 
   if #all_bookmarks == 0 then
     vim.notify("No bookmarks found", vim.log.levels.INFO)
@@ -389,7 +395,7 @@ function M.show_bookmarks_floating(book_slug)
     local cursor = vim.api.nvim_win_get_cursor(win)
     local bm = bm_map[cursor[1]]
     if bm then
-      bookmarks.remove(bm.id)
+      bookmarks.remove(bm.book_slug, bm.id)
       vim.api.nvim_win_close(win, true)
       M.show_bookmarks_floating(book_slug)
     end
@@ -397,11 +403,10 @@ function M.show_bookmarks_floating(book_slug)
 end
 
 function M.goto_bookmark(bm)
-  local ctx = context.ctx
+  local ctx = context.current()
 
   -- If different book, need to open it first
-  if not ctx.data or ctx.data.slug ~= bm.book_slug then
-    local library = require("ink.library")
+  if not ctx or not ctx.data or ctx.data.slug ~= bm.book_slug then
     local books = library.get_books()
     local book_path = nil
     for _, book in ipairs(books) do
@@ -428,7 +433,7 @@ function M.goto_bookmark(bm)
 
   -- Same book, just navigate
   if bm.chapter ~= ctx.current_chapter_idx then
-    render.render_chapter(bm.chapter, bm.paragraph_line)
+    render.render_chapter(bm.chapter, bm.paragraph_line, ctx)
   else
     vim.api.nvim_win_set_cursor(ctx.content_win, {bm.paragraph_line, 0})
   end
@@ -442,8 +447,8 @@ function M.show_all_bookmarks()
 end
 
 function M.show_book_bookmarks()
-  local ctx = context.ctx
-  if not ctx.data then
+  local ctx = context.current()
+  if not ctx or not ctx.data then
     vim.notify("No book open", vim.log.levels.WARN)
     return
   end

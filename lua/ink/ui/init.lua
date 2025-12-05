@@ -89,8 +89,6 @@ function M.setup_keymaps(buf)
 end
 
 function M.open_book(epub_data)
-  context.ctx.data = epub_data
-
   library.add_book({
     slug = epub_data.slug,
     title = epub_data.title,
@@ -102,8 +100,6 @@ function M.open_book(epub_data)
     chapter = 1,
     total_chapters = #epub_data.spine
   })
-
-  context.ctx.default_max_width = context.config.max_width
 
   local function find_buf_by_name(name)
     for _, buf in ipairs(vim.api.nvim_list_bufs()) do
@@ -118,93 +114,108 @@ function M.open_book(epub_data)
   local toc_name = "ink://" .. epub_data.slug .. "/TOC"
   local content_name = "ink://" .. epub_data.slug .. "/content"
   local existing_toc = find_buf_by_name(toc_name)
-  if existing_toc then vim.api.nvim_buf_delete(existing_toc, { force = true }) end
+  if existing_toc then
+    context.remove(existing_toc)
+    vim.api.nvim_buf_delete(existing_toc, { force = true })
+  end
   local existing_content = find_buf_by_name(content_name)
-  if existing_content then vim.api.nvim_buf_delete(existing_content, { force = true }) end
+  if existing_content then
+    context.remove(existing_content)
+    vim.api.nvim_buf_delete(existing_content, { force = true })
+  end
 
-  context.ctx.toc_buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_name(context.ctx.toc_buf, toc_name)
-  vim.api.nvim_set_option_value("filetype", "ink_toc", { buf = context.ctx.toc_buf })
+  -- Create buffers
+  local content_buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_name(content_buf, content_name)
+  vim.api.nvim_set_option_value("filetype", "ink_content", { buf = content_buf })
+  vim.api.nvim_set_option_value("syntax", "off", { buf = content_buf })
 
-  context.ctx.content_buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_name(context.ctx.content_buf, content_name)
-  vim.api.nvim_set_option_value("filetype", "ink_content", { buf = context.ctx.content_buf })
-  vim.api.nvim_set_option_value("syntax", "off", { buf = context.ctx.content_buf })
+  local toc_buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_name(toc_buf, toc_name)
+  vim.api.nvim_set_option_value("filetype", "ink_toc", { buf = toc_buf })
+
+  -- Create context for this book
+  local ctx = context.create(content_buf)
+  ctx.data = epub_data
+  ctx.toc_buf = toc_buf
+  ctx.content_buf = content_buf
+  ctx.default_max_width = context.config.max_width
 
   vim.cmd("tabnew")
-  context.ctx.content_win = vim.api.nvim_get_current_win()
-  vim.api.nvim_win_set_buf(context.ctx.content_win, context.ctx.content_buf)
+  ctx.content_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_buf(ctx.content_win, content_buf)
 
-  render.render_toc()
-  render.toggle_toc()
+  render.render_toc(ctx)
+  render.toggle_toc(ctx)
 
   local saved = state.load(epub_data.slug)
   if saved then
-    render.render_chapter(saved.chapter, saved.line)
-    if context.ctx.content_win and vim.api.nvim_win_is_valid(context.ctx.content_win) then
-      vim.api.nvim_set_current_win(context.ctx.content_win)
+    render.render_chapter(saved.chapter, saved.line, ctx)
+    if ctx.content_win and vim.api.nvim_win_is_valid(ctx.content_win) then
+      vim.api.nvim_set_current_win(ctx.content_win)
     end
   else
-    render.render_chapter(1)
+    render.render_chapter(1, nil, ctx)
   end
 
-  M.setup_keymaps(context.ctx.content_buf)
-  M.setup_keymaps(context.ctx.toc_buf)
+  M.setup_keymaps(content_buf)
+  M.setup_keymaps(toc_buf)
 
   local keymaps = context.config.keymaps or {}
   local keymap_opts = { noremap = true, silent = true }
   if keymaps.toggle_toc then
-    vim.api.nvim_buf_set_keymap(context.ctx.content_buf, "n", keymaps.toggle_toc, ":lua require('ink.ui').toggle_toc()<CR>", keymap_opts)
-    vim.api.nvim_buf_set_keymap(context.ctx.toc_buf, "n", keymaps.toggle_toc, ":lua require('ink.ui').toggle_toc()<CR>", keymap_opts)
+    vim.api.nvim_buf_set_keymap(content_buf, "n", keymaps.toggle_toc, ":lua require('ink.ui').toggle_toc()<CR>", keymap_opts)
+    vim.api.nvim_buf_set_keymap(toc_buf, "n", keymaps.toggle_toc, ":lua require('ink.ui').toggle_toc()<CR>", keymap_opts)
   end
 
   local highlight_keymaps = context.config.highlight_keymaps or {}
   for color_name, keymap in pairs(highlight_keymaps) do
     if color_name == "remove" then
-      vim.api.nvim_buf_set_keymap(context.ctx.content_buf, "n", keymap, ":lua require('ink.ui').remove_highlight()<CR>", keymap_opts)
+      vim.api.nvim_buf_set_keymap(content_buf, "n", keymap, ":lua require('ink.ui').remove_highlight()<CR>", keymap_opts)
     else
-      vim.api.nvim_buf_set_keymap(context.ctx.content_buf, "v", keymap, string.format(":lua require('ink.ui').add_highlight('%s')<CR>", color_name), keymap_opts)
+      vim.api.nvim_buf_set_keymap(content_buf, "v", keymap, string.format(":lua require('ink.ui').add_highlight('%s')<CR>", color_name), keymap_opts)
     end
   end
 
   local note_keymaps = context.config.note_keymaps or {}
   if note_keymaps.add then
-    vim.api.nvim_buf_set_keymap(context.ctx.content_buf, "n", note_keymaps.add, ":lua require('ink.ui').add_note()<CR>", keymap_opts)
+    vim.api.nvim_buf_set_keymap(content_buf, "n", note_keymaps.add, ":lua require('ink.ui').add_note()<CR>", keymap_opts)
   end
   if note_keymaps.edit then
-    vim.api.nvim_buf_set_keymap(context.ctx.content_buf, "n", note_keymaps.edit, ":lua require('ink.ui').edit_note()<CR>", keymap_opts)
+    vim.api.nvim_buf_set_keymap(content_buf, "n", note_keymaps.edit, ":lua require('ink.ui').edit_note()<CR>", keymap_opts)
   end
   if note_keymaps.remove then
-    vim.api.nvim_buf_set_keymap(context.ctx.content_buf, "n", note_keymaps.remove, ":lua require('ink.ui').remove_note()<CR>", keymap_opts)
+    vim.api.nvim_buf_set_keymap(content_buf, "n", note_keymaps.remove, ":lua require('ink.ui').remove_note()<CR>", keymap_opts)
   end
   if note_keymaps.toggle_display then
-    vim.api.nvim_buf_set_keymap(context.ctx.content_buf, "n", note_keymaps.toggle_display, ":lua require('ink.ui').toggle_note_display()<CR>", keymap_opts)
+    vim.api.nvim_buf_set_keymap(content_buf, "n", note_keymaps.toggle_display, ":lua require('ink.ui').toggle_note_display()<CR>", keymap_opts)
   end
 
   local bookmark_keymaps = context.config.bookmark_keymaps or {}
   if bookmark_keymaps.add then
-    vim.api.nvim_buf_set_keymap(context.ctx.content_buf, "n", bookmark_keymaps.add, ":lua require('ink.ui').add_bookmark()<CR>", keymap_opts)
+    vim.api.nvim_buf_set_keymap(content_buf, "n", bookmark_keymaps.add, ":lua require('ink.ui').add_bookmark()<CR>", keymap_opts)
   end
   if bookmark_keymaps.remove then
-    vim.api.nvim_buf_set_keymap(context.ctx.content_buf, "n", bookmark_keymaps.remove, ":lua require('ink.ui').remove_bookmark()<CR>", keymap_opts)
+    vim.api.nvim_buf_set_keymap(content_buf, "n", bookmark_keymaps.remove, ":lua require('ink.ui').remove_bookmark()<CR>", keymap_opts)
   end
   if bookmark_keymaps.next then
-    vim.api.nvim_buf_set_keymap(context.ctx.content_buf, "n", bookmark_keymaps.next, ":lua require('ink.ui').goto_next_bookmark()<CR>", keymap_opts)
+    vim.api.nvim_buf_set_keymap(content_buf, "n", bookmark_keymaps.next, ":lua require('ink.ui').goto_next_bookmark()<CR>", keymap_opts)
   end
   if bookmark_keymaps.prev then
-    vim.api.nvim_buf_set_keymap(context.ctx.content_buf, "n", bookmark_keymaps.prev, ":lua require('ink.ui').goto_prev_bookmark()<CR>", keymap_opts)
+    vim.api.nvim_buf_set_keymap(content_buf, "n", bookmark_keymaps.prev, ":lua require('ink.ui').goto_prev_bookmark()<CR>", keymap_opts)
   end
 
   local augroup = vim.api.nvim_create_augroup("Ink_" .. epub_data.slug, { clear = true })
   vim.api.nvim_create_autocmd("WinResized", {
     group = augroup,
     callback = function()
-      if context.ctx.content_win and vim.api.nvim_win_is_valid(context.ctx.content_win) then
+      local current_ctx = context.get(content_buf)
+      if current_ctx and current_ctx.content_win and vim.api.nvim_win_is_valid(current_ctx.content_win) then
         local resized_wins = vim.v.event.windows or {}
         for _, win_id in ipairs(resized_wins) do
-          if win_id == context.ctx.content_win then
-            local cursor = vim.api.nvim_win_get_cursor(context.ctx.content_win)
-            render.render_chapter(context.ctx.current_chapter_idx, cursor[1])
+          if win_id == current_ctx.content_win then
+            local cursor = vim.api.nvim_win_get_cursor(current_ctx.content_win)
+            render.render_chapter(current_ctx.current_chapter_idx, cursor[1], current_ctx)
             break
           end
         end
@@ -214,27 +225,30 @@ function M.open_book(epub_data)
 
   vim.api.nvim_create_autocmd({"CursorMoved", "CursorMovedI"}, {
     group = augroup,
-    buffer = context.ctx.content_buf,
+    buffer = content_buf,
     callback = function()
-      if not context.ctx.content_win or not vim.api.nvim_win_is_valid(context.ctx.content_win) then return end
-      local cursor = vim.api.nvim_win_get_cursor(context.ctx.content_win)
+      local current_ctx = context.get(content_buf)
+      if not current_ctx or not current_ctx.content_win or not vim.api.nvim_win_is_valid(current_ctx.content_win) then return end
+      local cursor = vim.api.nvim_win_get_cursor(current_ctx.content_win)
       local current_line = cursor[1]
-      local total_lines = vim.api.nvim_buf_line_count(context.ctx.content_buf)
+      local total_lines = vim.api.nvim_buf_line_count(current_ctx.content_buf)
       local percent = math.floor((current_line / total_lines) * 100)
-      if math.abs(percent - context.ctx.last_statusline_percent) >= 10 then
-        context.ctx.last_statusline_percent = percent
-        render.update_statusline()
+      if math.abs(percent - current_ctx.last_statusline_percent) >= 10 then
+        current_ctx.last_statusline_percent = percent
+        render.update_statusline(current_ctx)
       end
     end,
   })
 
   vim.api.nvim_create_autocmd("BufDelete", {
     group = augroup,
-    buffer = context.ctx.content_buf,
+    buffer = content_buf,
     callback = function()
-      if context.ctx.default_max_width then
-        context.config.max_width = context.ctx.default_max_width
+      local current_ctx = context.get(content_buf)
+      if current_ctx and current_ctx.default_max_width then
+        context.config.max_width = current_ctx.default_max_width
       end
+      context.remove(content_buf)
     end,
   })
 end

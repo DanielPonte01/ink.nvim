@@ -18,8 +18,8 @@ function M.search_toc(initial_text)
     return
   end
 
-  local ctx = context.ctx
-  if not ctx.data then vim.notify("No book currently open", vim.log.levels.WARN); return end
+  local ctx = context.current()
+  if not ctx or not ctx.data then vim.notify("No book currently open", vim.log.levels.WARN); return end
 
   local entries = {}
   for idx, chapter in ipairs(ctx.data.spine) do
@@ -70,7 +70,7 @@ function M.search_toc(initial_text)
       actions.select_default:replace(function()
         local selection = action_state.get_selected_entry()
         actions.close(prompt_bufnr)
-        render.render_chapter(selection.chapter_idx)
+        render.render_chapter(selection.chapter_idx, nil, ctx)
         if ctx.content_win and vim.api.nvim_win_is_valid(ctx.content_win) then vim.api.nvim_set_current_win(ctx.content_win) end
       end)
       if toggle_key then
@@ -89,8 +89,8 @@ end
 function M.search_content(initial_text)
   local ok, builtin = pcall(require, 'telescope.builtin')
   if not ok then vim.notify("Telescope not found. Install telescope.nvim to use search.", vim.log.levels.ERROR); return end
-  local ctx = context.ctx
-  if not ctx.data then vim.notify("No book currently open", vim.log.levels.WARN); return end
+  local ctx = context.current()
+  if not ctx or not ctx.data then vim.notify("No book currently open", vim.log.levels.WARN); return end
 
   local actions = require('telescope.actions')
   local action_state = require('telescope.actions.state')
@@ -110,7 +110,7 @@ function M.search_content(initial_text)
         local line_num = selection.lnum
         for idx, chapter in ipairs(ctx.data.spine) do
           if chapter.href:match(filename) then
-            render.render_chapter(idx, line_num)
+            render.render_chapter(idx, line_num, ctx)
             if ctx.content_win and vim.api.nvim_win_is_valid(ctx.content_win) then vim.api.nvim_set_current_win(ctx.content_win) end
             return
           end

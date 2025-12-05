@@ -54,20 +54,21 @@ local function open_note_input(initial_text, callback)
 end
 
 function M.add_note()
-  local ctx = context.ctx
+  local ctx = context.current()
+  if not ctx then return end
   local buf = vim.api.nvim_get_current_buf()
   if buf ~= ctx.content_buf then
     vim.notify("Notes can only be added in the content buffer", vim.log.levels.WARN)
     return
   end
-  local hl = util.get_highlight_at_cursor()
+  local hl = util.get_highlight_at_cursor(ctx)
   if not hl then vim.notify("No highlight under cursor", vim.log.levels.WARN); return end
   local existing_note = hl.note or ""
 
   open_note_input(existing_note, function(text)
     user_highlights.update_note(ctx.data.slug, hl, text)
     local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
-    render.render_chapter(ctx.current_chapter_idx, cursor[1])
+    render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
     if text and text ~= "" then
       if existing_note ~= "" then vim.notify("Note updated", vim.log.levels.INFO)
       else vim.notify("Note added", vim.log.levels.INFO) end
@@ -80,20 +81,22 @@ end
 M.edit_note = M.add_note
 
 function M.remove_note()
-  local ctx = context.ctx
+  local ctx = context.current()
+  if not ctx then return end
   local buf = vim.api.nvim_get_current_buf()
   if buf ~= ctx.content_buf then vim.notify("Notes can only be removed in the content buffer", vim.log.levels.WARN); return end
-  local hl = util.get_highlight_at_cursor()
+  local hl = util.get_highlight_at_cursor(ctx)
   if not hl then vim.notify("No highlight under cursor", vim.log.levels.WARN); return end
   if not hl.note or hl.note == "" then vim.notify("No note on this highlight", vim.log.levels.INFO); return end
   user_highlights.update_note(ctx.data.slug, hl, "")
   local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
-  render.render_chapter(ctx.current_chapter_idx, cursor[1])
+  render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
   vim.notify("Note removed", vim.log.levels.INFO)
 end
 
 function M.add_highlight(color)
-  local ctx = context.ctx
+  local ctx = context.current()
+  if not ctx then return end
   local buf = vim.api.nvim_get_current_buf()
   if buf ~= ctx.content_buf then vim.notify("Highlights can only be added in the content buffer", vim.log.levels.WARN); return end
   if not context.config.highlight_colors[color] then vim.notify("Unknown highlight color: " .. color, vim.log.levels.ERROR); return end
@@ -142,7 +145,7 @@ function M.add_highlight(color)
     color = color
   }
   user_highlights.add_highlight(ctx.data.slug, highlight)
-  render.render_chapter(ctx.current_chapter_idx, end_line)
+  render.render_chapter(ctx.current_chapter_idx, end_line, ctx)
   if ctx.content_win and vim.api.nvim_win_is_valid(ctx.content_win) then
     vim.api.nvim_win_set_cursor(ctx.content_win, {end_line, end_col})
   end
@@ -150,15 +153,16 @@ function M.add_highlight(color)
 end
 
 function M.remove_highlight()
-  local ctx = context.ctx
+  local ctx = context.current()
+  if not ctx then return end
   local buf = vim.api.nvim_get_current_buf()
   if buf ~= ctx.content_buf then vim.notify("Highlights can only be removed in the content buffer", vim.log.levels.WARN); return end
   local cursor = vim.api.nvim_win_get_cursor(0)
   local line = cursor[1]
-  local hl = util.get_highlight_at_cursor()
+  local hl = util.get_highlight_at_cursor(ctx)
   if not hl then vim.notify("No highlight under cursor", vim.log.levels.WARN); return end
   user_highlights.remove_highlight_by_text(ctx.data.slug, hl)
-  render.render_chapter(ctx.current_chapter_idx, line)
+  render.render_chapter(ctx.current_chapter_idx, line, ctx)
   if ctx.content_win and vim.api.nvim_win_is_valid(ctx.content_win) then
     vim.api.nvim_win_set_cursor(ctx.content_win, cursor)
   end
