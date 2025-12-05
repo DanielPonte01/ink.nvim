@@ -19,6 +19,7 @@ local default_config = {
     width_increase = "<leader>+",
     width_decrease = "<leader>-",
     width_reset = "<leader>=",
+    toggle_justify = "<leader>jt",  -- Toggle text justification
     library = "<leader>eL",  -- Open library
     last_book = "<leader>el"  -- Open last book
   },
@@ -36,7 +37,21 @@ local default_config = {
     red = "<leader>hr",
     blue = "<leader>hb",
     remove = "<leader>hd"
-  }
+  },
+  note_keymaps = {
+    add = "<leader>na",           -- Add/edit note on highlight under cursor
+    remove = "<leader>nd",       -- Remove note from highlight under cursor
+    toggle_display = "<leader>nt" -- Toggle note display mode (off/indicator/expanded)
+  },
+  bookmark_keymaps = {
+    add = "<leader>ba",           -- Add/edit bookmark
+    remove = "<leader>bd",        -- Remove bookmark
+    next = "<leader>bn",          -- Go to next bookmark
+    prev = "<leader>bp",          -- Go to previous bookmark
+    list_all = "<leader>bl",      -- List all bookmarks
+    list_book = "<leader>bb",     -- List bookmarks in current book
+  },
+  bookmark_icon = "📑"             -- Default bookmark icon
 }
 
 function M.setup(opts)
@@ -64,6 +79,9 @@ function M.setup(opts)
       highlight! InkItalic cterm=italic gui=italic
       highlight! InkUnderlined cterm=underline gui=underline
       highlight! InkStrikethrough cterm=strikethrough gui=strikethrough
+      highlight default link InkNoteIndicator DiagnosticInfo
+      highlight default link InkNoteText Comment
+      highlight default link InkBookmark DiagnosticHint
     ]])
 
     -- Define user highlight colors
@@ -128,6 +146,15 @@ function M.setup(opts)
     vim.cmd("edit " .. library_path)
   end, {})
 
+  -- Create Bookmarks commands
+  vim.api.nvim_create_user_command("InkBookmarks", function()
+    ui.show_all_bookmarks()
+  end, {})
+
+  vim.api.nvim_create_user_command("InkBookmarksBook", function()
+    ui.show_book_bookmarks()
+  end, {})
+
   -- Global keymaps for library features
   local keymaps = M.config.keymaps
   local opts = { noremap = true, silent = true }
@@ -138,6 +165,15 @@ function M.setup(opts)
 
   if keymaps.last_book then
     vim.api.nvim_set_keymap("n", keymaps.last_book, ":InkLast<CR>", opts)
+  end
+
+  -- Global keymaps for bookmarks
+  local bookmark_keymaps = M.config.bookmark_keymaps
+  if bookmark_keymaps.list_all then
+    vim.api.nvim_set_keymap("n", bookmark_keymaps.list_all, ":InkBookmarks<CR>", opts)
+  end
+  if bookmark_keymaps.list_book then
+    vim.api.nvim_set_keymap("n", bookmark_keymaps.list_book, ":InkBookmarksBook<CR>", opts)
   end
 end
 

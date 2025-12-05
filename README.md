@@ -11,9 +11,11 @@ A minimalist, distraction-free EPUB reader for Neovim.
 - Progress tracking and restoration
 - Image extraction and external viewing
 - User highlights with customizable colors (persistent across sessions)
+- Notes on highlights (add annotations to your highlights)
+- Bookmarks with navigation (jump between bookmarks across chapters)
 - Text justification (optional)
 - Footnote preview with floating windows
-- Library management (browse, search, track reading progress)
+- Library management (browse, search, track reading progress, search bookmarks)
 
 ## Requirements
 
@@ -108,7 +110,25 @@ require("ink").setup({
     remove = "<leader>hd"   -- Remove highlight under cursor
     -- Add more colors: purple, orange, pink, etc.
     -- purple = "<leader>hp",    -- Highlight with your custom highlight
-  }
+  },
+
+  -- Note keymaps (for annotations on highlights)
+  note_keymaps = {
+    add = "<leader>na",           -- Add/edit note on highlight under cursor
+    remove = "<leader>nd",        -- Remove note from highlight
+    toggle_display = "<leader>nt" -- Toggle note display (off/indicator/expanded)
+  },
+
+  -- Bookmark keymaps
+  bookmark_keymaps = {
+    add = "<leader>ba",           -- Add/edit bookmark at paragraph
+    remove = "<leader>bd",        -- Remove bookmark at paragraph
+    next = "<leader>bn",          -- Go to next bookmark
+    prev = "<leader>bp",          -- Go to previous bookmark
+    list_all = "<leader>bl",      -- List all bookmarks (global)
+    list_book = "<leader>bb",     -- List bookmarks in current book (global)
+  },
+  bookmark_icon = "📑"             -- Bookmark icon
 })
 
 -- Optional: Add a keymap to quickly open EPUB files
@@ -126,6 +146,8 @@ vim.keymap.set("n", "<leader>le", ":InkEditLibrary", { desc = "Edit you library 
 | `:InkLibrary` | Browse library of previously opened books |
 | `:InkLast` | Reopen last read book at saved position |
 | `:InkEditLibrary` | Edit library.json file manually |
+| `:InkBookmarks` | Browse all bookmarks (global) |
+| `:InkBookmarksBook` | Browse bookmarks in current book |
 
 ### Default Keymaps
 
@@ -152,6 +174,19 @@ vim.keymap.set("n", "<leader>le", ":InkEditLibrary", { desc = "Edit you library 
 - `<leader>hr` - Highlight selection in red (visual mode)
 - `<leader>hb` - Highlight selection in blue (visual mode)
 - `<leader>hd` - Remove highlight under cursor (normal mode)
+
+**Notes (on highlights):**
+- `<leader>na` - Add/edit note on highlight under cursor
+- `<leader>nd` - Remove note from highlight
+- `<leader>nt` - Toggle note display mode (off/indicator/expanded)
+
+**Bookmarks:**
+- `<leader>ba` - Add/edit bookmark at current paragraph
+- `<leader>bd` - Remove bookmark at current paragraph
+- `<leader>bn` - Go to next bookmark (across chapters)
+- `<leader>bp` - Go to previous bookmark (across chapters)
+- `<leader>bl` - List all bookmarks (global keymap)
+- `<leader>bb` - List bookmarks in current book (global keymap)
 
 **Library (global):**
 - `<leader>eL` - Open library browser
@@ -182,8 +217,47 @@ The library tracks all books you've opened with metadata and reading progress:
 - `<CR>` - Open selected book
 - `<C-d>` - Delete book from library
 - `<C-e>` - Edit library.json file
+- `<C-b>` - Switch to bookmarks view
 
 **Storage:** `~/.local/share/nvim/ink.nvim/library.json`
+
+### Bookmarks
+
+Bookmarks allow you to mark important passages and navigate between them:
+
+**Features:**
+- Add bookmarks to any paragraph in a book
+- Custom names for each bookmark
+- Navigate between bookmarks across chapters
+- Global search across all books or within current book
+- Visual indicator above bookmarked paragraphs
+
+**Telescope keymaps (in bookmarks picker):**
+- `<CR>` - Jump to bookmark location
+- `<C-d>` - Delete bookmark
+- `<C-e>` - Edit bookmarks.json file
+- `<C-f>` - Toggle between all bookmarks and current book bookmarks
+- `<C-b>` - Switch to library view
+
+**Storage:** `~/.local/share/nvim/ink.nvim/bookmarks.json`
+
+### Notes
+
+Notes allow you to annotate your highlights with additional text:
+
+**Features:**
+- Add notes to any highlight
+- Three display modes: off, indicator (shows dot), expanded (shows full note)
+- Notes persist across sessions
+- Dynamic input window that resizes as you type
+
+**Usage:**
+1. Create a highlight on some text
+2. Place cursor on the highlight
+3. Press `<leader>na` to add/edit a note
+4. Type your note and press `<Esc>` to save
+
+**Storage:** Stored alongside highlights in `~/.local/share/nvim/ink.nvim/{book}_highlights.json`
 
 ### Search Features
 
@@ -230,6 +304,8 @@ The test book includes:
 - **Chapter 2**: Code blocks, inline code, blockquotes (nested), definition lists
 - **Chapter 3**: Links, anchors, images
 - **Chapter 4**: User highlights documentation and examples
+- **Chapter 5**: Notes feature documentation and examples
+- **Chapter 6**: Bookmarks feature documentation and examples
 
 ## License
 GPL-3.0

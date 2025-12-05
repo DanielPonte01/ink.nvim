@@ -17,7 +17,7 @@ function M.parse_css(css_content)
   local pos = 1
   while pos <= #css_content do
     -- Find class selector: .classname
-    local class_start, class_end, class_name = css_content:find("%s*%.([%w_-]+)%s*{", pos)
+    local class_start, class_end, class_name = css_content:find("%s*%.([%w%._-]+)%s*{", pos)
 
     if not class_start then break end
 
@@ -79,29 +79,6 @@ function M.parse_css(css_content)
   end
 
   return class_styles
-end
-
--- Convert parsed CSS styles to highlight group names
-function M.get_highlight_groups(style)
-  local groups = {}
-
-  if style.bold then
-    table.insert(groups, "InkBold")
-  end
-
-  if style.italic then
-    table.insert(groups, "InkItalic")
-  end
-
-  if style.underline then
-    table.insert(groups, "InkUnderlined")
-  end
-
-  if style.strikethrough then
-    table.insert(groups, "InkStrikethrough")
-  end
-
-  return groups
 end
 
 return M
