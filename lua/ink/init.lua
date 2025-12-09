@@ -1,4 +1,5 @@
 local epub = require("ink.epub")
+local pdf = require("ink.pdf")
 local ui = require("ink.ui")
 
 local M = {}
@@ -145,6 +146,71 @@ function M.setup(opts)
     local library_path = vim.fn.stdpath("data") .. "/ink.nvim/library.json"
     vim.cmd("edit " .. library_path)
   end, {})
+
+  -- Create Add Library command (scans directory for EPUBs and adds them to library)
+  vim.api.nvim_create_user_command("InkAddLibrary", function(args)
+    local library = require("ink.library")
+    local directory = args.args
+    if directory == "" then
+      directory = vim.fn.getcwd()
+    end
+
+    vim.notify("Scanning for EPUB files in " .. directory .. "...", vim.log.levels.INFO)
+
+    local result, err = library.scan_directory(directory)
+    if not result then
+      vim.notify("Error: " .. err, vim.log.levels.ERROR)
+      return
+    end
+
+    local message = string.format(
+      "Scan complete:\n- Total EPUBs found: %d\n- Added to library: %d\n- Already in library: %d",
+      result.total,
+      result.added,
+      result.skipped
+    )
+
+    if #result.errors > 0 then
+      message = message .. "\n- Failed to parse: " .. #result.errors
+      for i, error_info in ipairs(result.errors) do
+        if i <= 3 then
+          message = message .. "\n  * " .. vim.fn.fnamemodify(error_info.path, ":t")
+        end
+      end
+      if #result.errors > 3 then
+        message = message .. "\n  ... and " .. (#result.errors - 3) .. " more"
+      end
+    end
+
+    vim.notify(message, vim.log.levels.INFO)
+  end, {
+    nargs = "?",
+    complete = "dir"
+  })
+
+  -- Create PDF command
+  vim.api.nvim_create_user_command("InkOpenPdf", function(args)
+    local path = args.args
+    if path == "" then
+      vim.notify("Please provide a PDF file path", vim.log.levels.ERROR)
+      return
+    end
+
+    -- Expand path
+    path = vim.fn.expand(path)
+
+    local ok, data = pcall(pdf.open, path, M.config.max_width, M.config.justify_text)
+    if not ok then
+      vim.notify("Failed to open PDF: " .. data, vim.log.levels.ERROR)
+      return
+    end
+
+    ui.open_pdf(data)
+
+  end, {
+    nargs = 1,
+    complete = "file"
+  })
 
   -- Create Bookmarks commands
   vim.api.nvim_create_user_command("InkBookmarks", function()

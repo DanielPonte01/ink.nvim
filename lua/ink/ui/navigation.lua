@@ -127,6 +127,9 @@ function M.increase_width()
   local step = context.config.width_step or 10
   local current = context.config.max_width or 120
   context.config.max_width = current + step
+  -- Invalidate cache since parsing depends on max_width
+  ctx.parsed_chapters = {}
+  ctx.search_index = nil
   local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
   render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
   vim.notify("Width: " .. context.config.max_width, vim.log.levels.INFO)
@@ -139,6 +142,9 @@ function M.decrease_width()
   local current = context.config.max_width or 120
   local new_width = math.max(40, current - step)
   context.config.max_width = new_width
+  -- Invalidate cache since parsing depends on max_width
+  ctx.parsed_chapters = {}
+  ctx.search_index = nil
   local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
   render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
   vim.notify("Width: " .. context.config.max_width, vim.log.levels.INFO)
@@ -149,6 +155,9 @@ function M.reset_width()
   if not ctx then return end
   if ctx.default_max_width then
     context.config.max_width = ctx.default_max_width
+    -- Invalidate cache since parsing depends on max_width
+    ctx.parsed_chapters = {}
+    ctx.search_index = nil
     local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
     render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
     vim.notify("Width reset: " .. context.config.max_width, vim.log.levels.INFO)
@@ -159,6 +168,9 @@ function M.toggle_justify()
   local ctx = context.current()
   if not ctx then return end
   context.config.justify_text = not context.config.justify_text
+  -- Invalidate cache since parsing depends on justify_text
+  ctx.parsed_chapters = {}
+  ctx.search_index = nil
   local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
   render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
   vim.notify("Justify: " .. (context.config.justify_text and "on" or "off"), vim.log.levels.INFO)

@@ -10,6 +10,36 @@ local parse = require("ink.html.parser")
 
 local M = {}
 
+-- Get parsed chapter with caching
+function M.get_parsed_chapter(chapter_idx, ctx)
+  ctx = ctx or context.current()
+  if not ctx then return nil end
+
+  -- Return from cache if exists
+  if ctx.parsed_chapters[chapter_idx] then
+    return ctx.parsed_chapters[chapter_idx]
+  end
+
+  -- Parse chapter
+  local chapter = ctx.data.spine[chapter_idx]
+  if not chapter then return nil end
+
+  local chapter_path = ctx.data.base_dir .. "/" .. chapter.href
+  local content = fs.read_file(chapter_path)
+  if not content then return nil end
+
+  local max_width = context.config.max_width or 120
+  local class_styles = ctx.data.class_styles or {}
+  local justify_text = context.config.justify_text or false
+
+  local parsed = html.parse(content, max_width, class_styles, justify_text)
+
+  -- Save to cache
+  ctx.parsed_chapters[chapter_idx] = parsed
+
+  return parsed
+end
+
 function M.update_statusline(ctx)
   ctx = ctx or context.current()
   if not ctx or not ctx.content_win or not vim.api.nvim_win_is_valid(ctx.content_win) then return end
@@ -64,19 +94,14 @@ function M.render_chapter(idx, restore_line, ctx)
     end
   end
 
-  local item = ctx.data.spine[idx]
-  local path = ctx.data.base_dir .. "/" .. item.href
-  local content = fs.read_file(path)
-
-  if not content then
-    vim.api.nvim_buf_set_lines(ctx.content_buf, 0, -1, false, {"Error reading chapter"})
+  -- Use get_parsed_chapter instead of parsing directly
+  local parsed = M.get_parsed_chapter(idx, ctx)
+  if not parsed then
+    vim.api.nvim_buf_set_lines(ctx.content_buf, 0, -1, false, {"Error parsing chapter " .. idx})
     return
   end
 
   local max_width = context.config.max_width or 120
-  local class_styles = ctx.data.class_styles or {}
-  local justify_text = context.config.justify_text or false
-  local parsed = html.parse(content, max_width, class_styles, justify_text)
 
   local win_width = vim.api.nvim_win_get_width(ctx.content_win)
   local padding = 0
@@ -348,6 +373,86 @@ function M.show_footnote_preview(anchor_id, ctx)
   vim.keymap.set("n", "q", close_float, { buffer = ctx.content_buf })
   vim.keymap.set("n", "<Esc>", close_float, { buffer = ctx.content_buf })
   return true
+end
+
+function M.render_pdf_content(pdf_data, restore_line, ctx)
+  ctx = ctx or context.current()
+  if not ctx then return end
+
+  ctx.current_chapter_idx = 1
+
+  if not ctx.content_win or not vim.api.nvim_win_is_valid(ctx.content_win) then
+    local found_win = nil
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+      if vim.api.nvim_win_is_valid(win) then
+        local buf = vim.api.nvim_win_get_buf(win)
+        if buf == ctx.content_buf then found_win = win; break end
+      end
+    end
+    if found_win then
+      ctx.content_win = found_win
+    else
+      vim.cmd("vsplit")
+      local new_win = vim.api.nvim_get_current_win()
+      vim.api.nvim_win_set_buf(new_win, ctx.content_buf)
+      ctx.content_win = new_win
+    end
+  end
+
+  local formatted = pdf_data.formatted
+  if not formatted or not formatted.lines then
+    vim.api.nvim_buf_set_lines(ctx.content_buf, 0, -1, false, {"Error: No formatted content"})
+    return
+  end
+
+  local lines = formatted.lines
+  local win_width = vim.api.nvim_win_get_width(ctx.content_win)
+  local max_width = context.config.max_width or 120
+  local padding = math.max(0, math.floor((win_width - max_width) / 2))
+  local pad_str = string.rep(" ", padding)
+
+  local padded_lines = {}
+  for _, line in ipairs(lines) do
+    table.insert(padded_lines, pad_str .. line)
+  end
+
+  vim.api.nvim_set_option_value("modifiable", true, { buf = ctx.content_buf })
+  vim.api.nvim_buf_set_lines(ctx.content_buf, 0, -1, false, padded_lines)
+  vim.api.nvim_set_option_value("modifiable", false, { buf = ctx.content_buf })
+
+  local ns = vim.api.nvim_create_namespace("ink_nvim")
+  vim.api.nvim_buf_clear_namespace(ctx.content_buf, ns, 0, -1)
+
+  -- Apply heading highlights
+  for _, hl in ipairs(formatted.highlights or {}) do
+    if hl.line and hl.type then
+      local hl_group = "Ink" .. hl.type:upper()
+      pcall(vim.api.nvim_buf_add_highlight, ctx.content_buf, ns, hl_group, hl.line - 1, padding, -1)
+    end
+  end
+
+  -- Apply user highlights
+  local highlights = user_highlights.get_chapter_highlights(pdf_data.slug, 1)
+  for _, hl in ipairs(highlights) do
+    M.apply_user_highlight(hl, ctx, padding, nil)
+  end
+
+  -- Apply bookmarks
+  local bookmarks = bookmarks_data.get_chapter_bookmarks(pdf_data.slug, 1)
+  for _, bm in ipairs(bookmarks) do
+    M.apply_bookmark_mark(bm, ctx, padding)
+  end
+
+  if restore_line then
+    vim.api.nvim_win_set_cursor(ctx.content_win, {restore_line, 0})
+  else
+    vim.api.nvim_win_set_cursor(ctx.content_win, {1, 0})
+  end
+
+  state.save(pdf_data.slug, 1, vim.api.nvim_win_get_cursor(ctx.content_win)[1])
+  library.update_progress(pdf_data.slug, 1, 1)
+
+  M.update_statusline(ctx)
 end
 
 return M

@@ -263,4 +263,150 @@ function M.open_last_book()
   M.open_book(epub_data)
 end
 
+function M.open_pdf(pdf_data)
+  library.add_book({
+    slug = pdf_data.slug,
+    title = pdf_data.title,
+    author = "",
+    language = "",
+    date = "",
+    description = "",
+    path = pdf_data.path,
+    chapter = 1,
+    total_chapters = 1
+  })
+
+  local function find_buf_by_name(name)
+    for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+      if vim.api.nvim_buf_is_valid(buf) then
+        local buf_name = vim.api.nvim_buf_get_name(buf)
+        if buf_name == name then return buf end
+      end
+    end
+    return nil
+  end
+
+  local toc_name = "ink://" .. pdf_data.slug .. "/TOC"
+  local content_name = "ink://" .. pdf_data.slug .. "/content"
+  local existing_toc = find_buf_by_name(toc_name)
+  if existing_toc then
+    context.remove(existing_toc)
+    vim.api.nvim_buf_delete(existing_toc, { force = true })
+  end
+  local existing_content = find_buf_by_name(content_name)
+  if existing_content then
+    context.remove(existing_content)
+    vim.api.nvim_buf_delete(existing_content, { force = true })
+  end
+
+  -- Create buffers
+  local content_buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_name(content_buf, content_name)
+  vim.api.nvim_set_option_value("filetype", "ink_content", { buf = content_buf })
+  vim.api.nvim_set_option_value("syntax", "off", { buf = content_buf })
+
+  local toc_buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_name(toc_buf, toc_name)
+  vim.api.nvim_set_option_value("filetype", "ink_toc", { buf = toc_buf })
+
+  -- Create context for this PDF
+  local ctx = context.create(content_buf)
+  ctx.data = {
+    slug = pdf_data.slug,
+    title = pdf_data.title,
+    path = pdf_data.path,
+    spine = {{ href = "content", id = "content" }},
+    toc = pdf_data.toc or {},
+    pdf_mode = true,
+    pdf_data = pdf_data
+  }
+  ctx.toc_buf = toc_buf
+  ctx.content_buf = content_buf
+  ctx.default_max_width = context.config.max_width
+
+  vim.cmd("tabnew")
+  ctx.content_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_buf(ctx.content_win, content_buf)
+
+  render.render_toc(ctx)
+  render.toggle_toc(ctx)
+
+  local saved = state.load(pdf_data.slug)
+  if saved then
+    render.render_pdf_content(pdf_data, saved.line, ctx)
+    if ctx.content_win and vim.api.nvim_win_is_valid(ctx.content_win) then
+      vim.api.nvim_set_current_win(ctx.content_win)
+    end
+  else
+    render.render_pdf_content(pdf_data, nil, ctx)
+  end
+
+  M.setup_keymaps(content_buf)
+  M.setup_keymaps(toc_buf)
+
+  local keymaps = context.config.keymaps or {}
+  local keymap_opts = { noremap = true, silent = true }
+  if keymaps.toggle_toc then
+    vim.api.nvim_buf_set_keymap(content_buf, "n", keymaps.toggle_toc, ":lua require('ink.ui').toggle_toc()<CR>", keymap_opts)
+    vim.api.nvim_buf_set_keymap(toc_buf, "n", keymaps.toggle_toc, ":lua require('ink.ui').toggle_toc()<CR>", keymap_opts)
+  end
+
+  local highlight_keymaps = context.config.highlight_keymaps or {}
+  for color_name, keymap in pairs(highlight_keymaps) do
+    if color_name == "remove" then
+      vim.api.nvim_buf_set_keymap(content_buf, "n", keymap, ":lua require('ink.ui').remove_highlight()<CR>", keymap_opts)
+    else
+      vim.api.nvim_buf_set_keymap(content_buf, "v", keymap, string.format(":lua require('ink.ui').add_highlight('%s')<CR>", color_name), keymap_opts)
+    end
+  end
+
+  local bookmark_keymaps = context.config.bookmark_keymaps or {}
+  if bookmark_keymaps.add then
+    vim.api.nvim_buf_set_keymap(content_buf, "n", bookmark_keymaps.add, ":lua require('ink.ui').add_bookmark()<CR>", keymap_opts)
+  end
+  if bookmark_keymaps.remove then
+    vim.api.nvim_buf_set_keymap(content_buf, "n", bookmark_keymaps.remove, ":lua require('ink.ui').remove_bookmark()<CR>", keymap_opts)
+  end
+  if bookmark_keymaps.next then
+    vim.api.nvim_buf_set_keymap(content_buf, "n", bookmark_keymaps.next, ":lua require('ink.ui').goto_next_bookmark()<CR>", keymap_opts)
+  end
+  if bookmark_keymaps.prev then
+    vim.api.nvim_buf_set_keymap(content_buf, "n", bookmark_keymaps.prev, ":lua require('ink.ui').goto_prev_bookmark()<CR>", keymap_opts)
+  end
+
+  local augroup = vim.api.nvim_create_augroup("Ink_" .. pdf_data.slug, { clear = true })
+  vim.api.nvim_create_autocmd("WinResized", {
+    group = augroup,
+    callback = function()
+      local current_ctx = context.get(content_buf)
+      if current_ctx and current_ctx.content_win and vim.api.nvim_win_is_valid(current_ctx.content_win) then
+        local resized_wins = vim.v.event.windows or {}
+        for _, win_id in ipairs(resized_wins) do
+          if win_id == current_ctx.content_win then
+            local cursor = vim.api.nvim_win_get_cursor(current_ctx.content_win)
+            local pdf_mod = require("ink.pdf")
+            local updated_data = pdf_mod.reformat(pdf_data, context.config.max_width, context.config.justify_text)
+            if updated_data then
+              render.render_pdf_content(updated_data, cursor[1], current_ctx)
+            end
+            break
+          end
+        end
+      end
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("BufDelete", {
+    group = augroup,
+    buffer = content_buf,
+    callback = function()
+      local current_ctx = context.get(content_buf)
+      if current_ctx and current_ctx.default_max_width then
+        context.config.max_width = current_ctx.default_max_width
+      end
+      context.remove(content_buf)
+    end,
+  })
+end
+
 return M

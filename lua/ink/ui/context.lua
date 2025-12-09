@@ -21,7 +21,9 @@ local function new_context()
     last_statusline_percent = 0,
     note_display_mode = "indicator",
     rendered_lines = {},
-    default_max_width = nil
+    default_max_width = nil,
+    parsed_chapters = {},
+    search_index = nil
   }
 end
 

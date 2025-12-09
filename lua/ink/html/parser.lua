@@ -2,6 +2,7 @@ local entities = require("ink.html.entities")
 local tokens = require("ink.html.tokens")
 local formatter = require("ink.html.formatter")
 local utils = require("ink.html.utils")
+local table_module = require("ink.html.table")
 
 local M = {}
 
@@ -24,6 +25,7 @@ function M.parse(content, max_width, class_styles, justify_text)
   local in_heading = false
   local in_title = false
   local in_head = false
+  local table_state = table_module.new_table_state()
 
   local state = {
     lines = lines,
@@ -44,7 +46,8 @@ function M.parse(content, max_width, class_styles, justify_text)
     in_title = in_title,
     in_head = in_head,
     max_width = max_width,
-    class_styles = class_styles
+    class_styles = class_styles,
+    table_state = table_state
   }
 
   -- Main parsing loop

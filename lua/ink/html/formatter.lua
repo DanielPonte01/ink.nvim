@@ -1,6 +1,7 @@
 local tokens = require("ink.html.tokens")
 local entities = require("ink.html.entities")
 local utils = require("ink.html.utils")
+local table_module = require("ink.html.table")
 
 local M = {}
 
@@ -43,6 +44,12 @@ function M.new_line(state)
 end
 
 function M.add_text(state, text)
+  -- If inside table cell, accumulate text in current_cell
+  if state.table_state.in_table and state.table_state.in_row then
+    state.table_state.current_cell = state.table_state.current_cell .. text
+    return
+  end
+
   if state.in_pre then
     local pre_lines = {}
     local pos = 1
@@ -164,7 +171,80 @@ function M.process_tag(state, tag_name, tag_content, is_closing, start_tag, end_
   end
 end
 
+-- Handle table-related tags
+function M.handle_table_tag(state, tag_name, is_closing)
+  local ts = state.table_state
+
+  if tag_name == "table" then
+    if is_closing then
+      -- Render the complete table
+      if ts.in_table then
+        M.new_line(state)
+        local indent = M.get_indent(state)
+        local table_lines = table_module.render_table(ts, state.max_width, indent)
+
+        for _, line in ipairs(table_lines) do
+          table.insert(state.lines, line)
+          -- Mark table lines as no-justify
+          state.no_justify[#state.lines] = true
+        end
+
+        M.new_line(state)
+        -- Reset table state
+        state.table_state = table_module.new_table_state()
+      end
+    else
+      -- Start new table
+      M.new_line(state)
+      ts.in_table = true
+      ts.headers = {}
+      ts.rows = {}
+      ts.current_row = {}
+      ts.current_cell = ""
+    end
+  elseif tag_name == "thead" then
+    ts.in_thead = not is_closing
+  elseif tag_name == "tbody" then
+    ts.in_tbody = not is_closing
+  elseif tag_name == "tr" then
+    if is_closing then
+      -- Finish current row
+      if ts.in_row and #ts.current_row > 0 then
+        if ts.in_thead then
+          ts.headers = ts.current_row
+        else
+          table.insert(ts.rows, ts.current_row)
+        end
+        ts.current_row = {}
+      end
+      ts.in_row = false
+    else
+      -- Start new row
+      ts.in_row = true
+      ts.current_row = {}
+    end
+  elseif tag_name == "th" or tag_name == "td" then
+    if is_closing then
+      -- Finish current cell
+      if ts.in_row then
+        table.insert(ts.current_row, ts.current_cell)
+        ts.current_cell = ""
+      end
+    else
+      -- Start new cell
+      ts.current_cell = ""
+    end
+  end
+end
+
 function M.handle_closing_tag(state, tag_name)
+  -- Handle table tags
+  if tag_name == "table" or tag_name == "thead" or tag_name == "tbody" or
+     tag_name == "tr" or tag_name == "th" or tag_name == "td" then
+    M.handle_table_tag(state, tag_name, true)
+    return
+  end
+
   if tag_name == "head" then
     state.in_head = false
   elseif tag_name == "title" then
@@ -216,6 +296,13 @@ function M.handle_closing_tag(state, tag_name)
 end
 
 function M.handle_opening_tag(state, tag_name, tag_content, start_tag, end_tag, content)
+  -- Handle table tags
+  if tag_name == "table" or tag_name == "thead" or tag_name == "tbody" or
+     tag_name == "tr" or tag_name == "th" or tag_name == "td" then
+    M.handle_table_tag(state, tag_name, false)
+    return
+  end
+
   if tag_name == "head" then
     state.in_head = true
   elseif tag_name == "title" then

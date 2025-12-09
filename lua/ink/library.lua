@@ -157,4 +157,74 @@ function M.format_last_opened(timestamp)
   end
 end
 
+-- Scan directory for EPUB files and add them to library
+function M.scan_directory(directory)
+  local epub = require("ink.epub")
+
+  -- Expand and normalize directory path
+  directory = vim.fn.fnamemodify(vim.fn.expand(directory), ":p")
+
+  if not fs.exists(directory) then
+    return nil, "Directory not found: " .. directory
+  end
+
+  -- Find all .epub files recursively
+  local handle = io.popen("find " .. vim.fn.shellescape(directory) .. " -type f -name '*.epub' 2>/dev/null")
+  if not handle then
+    return nil, "Failed to scan directory"
+  end
+
+  local epub_files = {}
+  for file in handle:lines() do
+    table.insert(epub_files, file)
+  end
+  handle:close()
+
+  local added = 0
+  local skipped = 0
+  local errors = {}
+
+  for _, epub_path in ipairs(epub_files) do
+    local ok, data = pcall(epub.open, epub_path)
+    if ok then
+      local book_info = {
+        slug = data.slug,
+        title = data.title,
+        author = data.author,
+        language = data.language,
+        date = data.date,
+        description = data.description,
+        path = data.path,
+        total_chapters = #data.spine
+      }
+
+      -- Check if book already exists
+      local library = M.load()
+      local exists = false
+      for _, book in ipairs(library.books) do
+        if book.slug == book_info.slug or book.path == book_info.path then
+          exists = true
+          break
+        end
+      end
+
+      if not exists then
+        M.add_book(book_info)
+        added = added + 1
+      else
+        skipped = skipped + 1
+      end
+    else
+      table.insert(errors, { path = epub_path, error = tostring(data) })
+    end
+  end
+
+  return {
+    total = #epub_files,
+    added = added,
+    skipped = skipped,
+    errors = errors
+  }
+end
+
 return M
