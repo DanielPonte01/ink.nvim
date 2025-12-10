@@ -2,56 +2,9 @@ local user_highlights = require("ink.user_highlights")
 local context = require("ink.ui.context")
 local util = require("ink.ui.util")
 local render = require("ink.ui.render")
+local modals = require("ink.ui.modals")
 
 local M = {}
-
-local function open_note_input(initial_text, callback)
-  local buf = vim.api.nvim_create_buf(false, true)
-  local width = 60
-  local min_height = 3
-  local max_height = 15
-
-  local function calc_height(lines)
-    return math.max(min_height, math.min(#lines, max_height))
-  end
-
-  local initial_lines = (initial_text and initial_text ~= "") and vim.split(initial_text, "\n") or {""}
-  if initial_text and initial_text ~= "" then
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, initial_lines)
-  end
-
-  local win = vim.api.nvim_open_win(buf, true, {
-    relative = "cursor", row = 1, col = 0, width = width, height = calc_height(initial_lines),
-    style = "minimal", border = "rounded", title = " Note (Esc to save, empty to remove) ", title_pos = "center",
-  })
-  vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
-  vim.api.nvim_set_option_value("buftype", "nofile", { buf = buf })
-  vim.api.nvim_set_option_value("wrap", true, { win = win })
-
-  local function resize_win()
-    if not vim.api.nvim_win_is_valid(win) then return end
-    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    local new_height = calc_height(lines)
-    vim.api.nvim_win_set_config(win, { height = new_height })
-  end
-
-  local augroup = vim.api.nvim_create_augroup("InkNoteResize", { clear = true })
-  vim.api.nvim_create_autocmd({"TextChanged", "TextChangedI"}, {
-    group = augroup,
-    buffer = buf,
-    callback = resize_win,
-  })
-
-  if not initial_text or initial_text == "" then vim.cmd("startinsert") end
-  vim.keymap.set("i", "<Esc>", function() vim.cmd("stopinsert") end, { buffer = buf })
-  vim.keymap.set("n", "<Esc>", function()
-    vim.api.nvim_del_augroup_by_id(augroup)
-    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    local text = table.concat(lines, "\n"):match("^%s*(.-)%s*$")
-    vim.api.nvim_win_close(win, true)
-    if callback then callback(text) end
-  end, { buffer = buf })
-end
 
 function M.add_note()
   local ctx = context.current()
@@ -65,7 +18,7 @@ function M.add_note()
   if not hl then vim.notify("No highlight under cursor", vim.log.levels.WARN); return end
   local existing_note = hl.note or ""
 
-  open_note_input(existing_note, function(text)
+  modals.open_note_input(existing_note, function(text)
     user_highlights.update_note(ctx.data.slug, hl, text)
     local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
     render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)

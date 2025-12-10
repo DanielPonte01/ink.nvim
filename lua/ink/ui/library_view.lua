@@ -73,10 +73,14 @@ function M.show_library_telescope(books)
         actions.close(prompt_bufnr)
         local book = selection.book
         if not fs.exists(book.path) then vim.notify("Book not found: " .. book.path, vim.log.levels.ERROR); return end
+
         local epub = require("ink.epub")
         local ok, epub_data = pcall(epub.open, book.path)
-        if ok then open_book_via_init(epub_data)
-        else vim.notify("Failed to open: " .. tostring(epub_data), vim.log.levels.ERROR) end
+        if ok then
+          open_book_via_init(epub_data)
+        else
+          vim.notify("Failed to open: " .. tostring(epub_data), vim.log.levels.ERROR)
+        end
       end)
       map('i', '<C-d>', function()
         local selection = action_state.get_selected_entry()
@@ -153,10 +157,14 @@ function M.show_library_floating(books)
     if book then
       close_window()
       if not fs.exists(book.path) then vim.notify("Book not found: " .. book.path, vim.log.levels.ERROR); return end
+
       local epub = require("ink.epub")
       local ok, epub_data = pcall(epub.open, book.path)
-      if ok then open_book_via_init(epub_data)
-      else vim.notify("Failed to open: " .. tostring(epub_data), vim.log.levels.ERROR) end
+      if ok then
+        open_book_via_init(epub_data)
+      else
+        vim.notify("Failed to open: " .. tostring(epub_data), vim.log.levels.ERROR)
+      end
     end
   end, { buffer = buf })
   vim.keymap.set("n", "d", function()

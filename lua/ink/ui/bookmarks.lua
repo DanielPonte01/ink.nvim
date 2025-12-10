@@ -2,6 +2,7 @@ local bookmarks = require("ink.bookmarks")
 local context = require("ink.ui.context")
 local render = require("ink.ui.render")
 local library = require("ink.library")
+local modals = require("ink.ui.modals")
 
 local M = {}
 
@@ -64,52 +65,6 @@ local function get_paragraph_preview(lines, start_line, max_chars)
   return text
 end
 
-local function open_bookmark_input(initial_name, callback)
-  local buf = vim.api.nvim_create_buf(false, true)
-  local width = 60
-  local min_height = 1
-  local max_height = 5
-
-  local function calc_height(lines)
-    return math.max(min_height, math.min(#lines, max_height))
-  end
-
-  local initial_lines = (initial_name and initial_name ~= "") and {initial_name} or {""}
-  if initial_name and initial_name ~= "" then
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, initial_lines)
-  end
-
-  local win = vim.api.nvim_open_win(buf, true, {
-    relative = "cursor", row = 1, col = 0, width = width, height = calc_height(initial_lines),
-    style = "minimal", border = "rounded", title = " Bookmark name (Esc to save, empty to cancel) ", title_pos = "center",
-  })
-  vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
-  vim.api.nvim_set_option_value("buftype", "nofile", { buf = buf })
-
-  local function resize_win()
-    if not vim.api.nvim_win_is_valid(win) then return end
-    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    local new_height = calc_height(lines)
-    vim.api.nvim_win_set_config(win, { height = new_height })
-  end
-
-  local augroup = vim.api.nvim_create_augroup("InkBookmarkResize", { clear = true })
-  vim.api.nvim_create_autocmd({"TextChanged", "TextChangedI"}, {
-    group = augroup,
-    buffer = buf,
-    callback = resize_win,
-  })
-
-  if not initial_name or initial_name == "" then vim.cmd("startinsert") end
-  vim.keymap.set("i", "<Esc>", function() vim.cmd("stopinsert") end, { buffer = buf })
-  vim.keymap.set("n", "<Esc>", function()
-    vim.api.nvim_del_augroup_by_id(augroup)
-    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    local name = table.concat(lines, " "):match("^%s*(.-)%s*$")
-    vim.api.nvim_win_close(win, true)
-    if callback then callback(name) end
-  end, { buffer = buf })
-end
 
 function M.add_bookmark()
   local ctx = context.current()
@@ -129,7 +84,7 @@ function M.add_bookmark()
   local existing = bookmarks.find_at_line(ctx.data.slug, ctx.current_chapter_idx, paragraph_line)
   if existing then
     -- Edit existing bookmark
-    open_bookmark_input(existing.name, function(name)
+    modals.open_bookmark_input(existing.name, function(name)
       if name and name ~= "" then
         bookmarks.update(ctx.data.slug, existing.id, name)
         render.render_chapter(ctx.current_chapter_idx, cursor_line, ctx)
@@ -141,7 +96,7 @@ function M.add_bookmark()
 
   local preview = get_paragraph_preview(lines, paragraph_line, 100)
 
-  open_bookmark_input("", function(name)
+  modals.open_bookmark_input("", function(name)
     if name and name ~= "" then
       local bookmark = {
         name = name,
@@ -303,10 +258,10 @@ function M.show_bookmarks_telescope(book_slug, switch_callback)
           M.show_bookmarks_telescope(nil, switch_callback)
         else
           -- Go to local (book)
-          if ctx.data and ctx.data.slug then
+          if ctx and ctx.data and ctx.data.slug then
             M.show_bookmarks_telescope(ctx.data.slug, switch_callback)
           else
-            vim.notify("No book open to show local bookmarks", vim.log.levels.WARN)
+            vim.notify("No book open", vim.log.levels.WARN)
             M.show_bookmarks_telescope(nil, switch_callback)
           end
         end

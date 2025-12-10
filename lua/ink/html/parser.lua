@@ -14,6 +14,7 @@ function M.parse(content, max_width, class_styles, justify_text)
   local anchors = {}
   local no_justify = {}
   local centered_lines = {}
+  local headings = {}
 
   local current_line = ""
   local style_stack = {}
@@ -25,6 +26,11 @@ function M.parse(content, max_width, class_styles, justify_text)
   local in_heading = false
   local in_title = false
   local in_head = false
+  local current_heading_level = nil
+  local current_heading_text = ""
+  local current_heading_id = nil
+  local current_heading_title_attr = nil
+  local current_heading_is_title = false
   local table_state = table_module.new_table_state()
 
   local state = {
@@ -35,6 +41,7 @@ function M.parse(content, max_width, class_styles, justify_text)
     anchors = anchors,
     no_justify = no_justify,
     centered_lines = centered_lines,
+    headings = headings,
     current_line = current_line,
     style_stack = style_stack,
     list_stack = list_stack,
@@ -45,6 +52,11 @@ function M.parse(content, max_width, class_styles, justify_text)
     in_heading = in_heading,
     in_title = in_title,
     in_head = in_head,
+    current_heading_level = current_heading_level,
+    current_heading_text = current_heading_text,
+    current_heading_id = current_heading_id,
+    current_heading_title_attr = current_heading_title_attr,
+    current_heading_is_title = current_heading_is_title,
     max_width = max_width,
     class_styles = class_styles,
     table_state = table_state
@@ -112,7 +124,8 @@ function M.parse(content, max_width, class_styles, justify_text)
     images = images,
     anchors = anchors,
     justify_map = justify_map,
-    centered_lines = centered_lines
+    centered_lines = centered_lines,
+    headings = headings
   }
 end
 

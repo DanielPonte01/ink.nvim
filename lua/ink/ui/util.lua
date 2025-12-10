@@ -29,13 +29,20 @@ function M.open_image(src, ctx)
   if vim.fn.has("mac") == 1 then
     cmd = {"open", image_path}
   elseif vim.fn.has("unix") == 1 then
-    cmd = {"xdg-open", image_path}
+    -- Try common image viewers first, fallback to xdg-open
+    local viewers = {"feh", "sxiv", "imv", "eog", "gwenview", "xdg-open"}
+    for _, viewer in ipairs(viewers) do
+      if vim.fn.executable(viewer) == 1 then
+        cmd = {viewer, image_path}
+        break
+      end
+    end
   elseif vim.fn.has("win32") == 1 then
     cmd = {"cmd", "/c", "start", "", image_path}
   end
 
   if not cmd then
-    vim.notify("Could not determine image viewer command for your OS", vim.log.levels.ERROR)
+    vim.notify("Could not find image viewer", vim.log.levels.ERROR)
     return
   end
 
@@ -59,6 +66,10 @@ function M.normalize_whitespace(text)
 end
 
 function M.offset_to_line_col(lines, offset)
+  if not lines or #lines == 0 then
+    return 1, 0
+  end
+
   local current_offset = 0
   for i, line in ipairs(lines) do
     local line_len = #line + 1
@@ -67,12 +78,16 @@ function M.offset_to_line_col(lines, offset)
     end
     current_offset = current_offset + line_len
   end
-  return #lines, #lines[#lines]
+  return #lines, #(lines[#lines] or "")
 end
 
 function M.line_col_to_offset(lines, line, col)
+  if not lines or #lines == 0 then
+    return 0
+  end
+
   local offset = 0
-  for i = 1, line - 1 do
+  for i = 1, math.min(line - 1, #lines) do
     offset = offset + #lines[i] + 1
   end
   return offset + col

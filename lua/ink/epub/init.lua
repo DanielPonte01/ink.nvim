@@ -12,7 +12,45 @@ local function get_cache_dir()
   return vim.fn.stdpath("data") .. "/ink.nvim/cache"
 end
 
-function M.open(epub_path)
+-- Build TOC from content headings (H1-H3)
+-- This is a lazy function that will be called only when TOC is first accessed
+function M.build_toc_from_content(spine, base_dir, class_styles)
+  local html = require("ink.html")
+  local toc = {}
+
+  for chapter_idx, spine_item in ipairs(spine) do
+    local chapter_path = base_dir .. "/" .. spine_item.href
+    local content = fs.read_file(chapter_path)
+
+    if content then
+      -- Parse with a simple max_width for heading extraction
+      local parsed = html.parse(content, 80, class_styles, false)
+
+      -- Add headings to TOC
+      if parsed.headings then
+        for _, heading in ipairs(parsed.headings) do
+          local href = spine_item.href
+          if heading.id then
+            href = href .. "#" .. heading.id
+          end
+
+          table.insert(toc, {
+            label = heading.text,
+            href = href,
+            level = heading.level
+          })
+        end
+      end
+    end
+  end
+
+  return toc
+end
+
+function M.open(epub_path, opts)
+  opts = opts or {}
+  local skip_toc_generation = opts.skip_toc_generation or false
+
   epub_path = vim.fn.fnamemodify(epub_path, ":p")
 
   if not fs.exists(epub_path) then
@@ -88,6 +126,23 @@ function M.open(epub_path)
 
   -- 4. CSS
   local class_styles = css.parse_all_css_files(manifest, opf_dir, cache_dir)
+
+  -- 5. Build TOC from content headings (H1-H3) - with caching
+  -- Try to load from cache first
+  local toc_cache = require("ink.toc_cache")
+  local cached_toc = toc_cache.load(slug)
+
+  if cached_toc and #cached_toc > 0 then
+    -- Use cached TOC
+    toc = cached_toc
+  elseif not skip_toc_generation then
+    -- Build TOC and cache it
+    local content_toc = M.build_toc_from_content(spine, opf_dir, class_styles)
+    if #content_toc > 0 then
+      toc = content_toc
+      toc_cache.save(slug, toc)
+    end
+  end
 
   return {
     title = metadata.title,
