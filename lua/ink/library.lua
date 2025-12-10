@@ -64,7 +64,8 @@ function M.add_book(book_info)
     path = book_info.path,
     last_opened = os.time(),
     chapter = book_info.chapter or 1,
-    total_chapters = book_info.total_chapters or 1
+    total_chapters = book_info.total_chapters or 1,
+    tag = book_info.tag or ""
   }
 
   if found_idx then
@@ -155,6 +156,21 @@ function M.format_last_opened(timestamp)
   else
     return os.date("%Y-%m-%d", timestamp)
   end
+end
+
+-- Set tag for a book
+function M.set_book_tag(slug, tag)
+  local library = M.load()
+
+  for i, book in ipairs(library.books) do
+    if book.slug == slug then
+      library.books[i].tag = tag
+      M.save(library)
+      return true
+    end
+  end
+
+  return false
 end
 
 -- Scan directory for EPUB files and add them to library (async version)

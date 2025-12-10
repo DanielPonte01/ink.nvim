@@ -9,6 +9,31 @@ local function open_book_via_init(epub_data)
   require("ink.ui").open_book(epub_data)
 end
 
+-- Helper function to calculate visual width of string (handles multibyte chars)
+local function visual_width(str)
+  return vim.fn.strdisplaywidth(str)
+end
+
+-- Helper function to truncate and pad string to exact width
+local function fit_string(str, width)
+  if not str or str == "" then
+    return string.rep(" ", width)
+  end
+
+  local vw = visual_width(str)
+  if vw > width then
+    -- Truncate: keep removing chars until it fits
+    local result = str
+    while visual_width(result) > width do
+      result = result:sub(1, vim.fn.byteidx(result, vim.fn.strchars(result) - 1))
+    end
+    return result
+  else
+    -- Pad with spaces
+    return str .. string.rep(" ", width - vw)
+  end
+end
+
 function M.show_library_telescope(books)
   local pickers = require('telescope.pickers')
   local finders = require('telescope.finders')
@@ -22,9 +47,15 @@ function M.show_library_telescope(books)
     local progress = math.floor((book.chapter / book.total_chapters) * 100)
     local last_opened = library.format_last_opened(book.last_opened)
     local author = book.author or "Unknown"
+    local tag = book.tag or ""
+    local title_str = fit_string(book.title, 30)
+    local author_str = fit_string(author, 20)
+    local tag_str = fit_string(tag, 15)
+    local progress_str = string.format("%3d%%", progress)
+
     table.insert(entries, {
-      display = string.format("%-30s │ %-20s │ %3d%% │ %s", book.title:sub(1, 30), author:sub(1, 20), progress, last_opened),
-      ordinal = book.title .. " " .. author,
+      display = string.format("%s │ %s │ %s │ %s │ %s", title_str, author_str, tag_str, progress_str, last_opened),
+      ordinal = book.title .. " " .. author .. " " .. tag,
       book = book,
       progress = progress,
       last_opened = last_opened,
@@ -33,7 +64,7 @@ function M.show_library_telescope(books)
   end
 
   pickers.new({}, {
-    prompt_title = "Library (C-b: bookmarks, C-d: delete, C-e: edit)",
+    prompt_title = "Library (C-b: bookmarks, C-d: delete, C-e: edit, C-t: tag)",
     finder = finders.new_table({
       results = entries,
       entry_maker = function(entry)
@@ -112,6 +143,32 @@ function M.show_library_telescope(books)
         local bookmarks_ui = require("ink.ui.bookmarks")
         bookmarks_ui.show_bookmarks_telescope(nil, function() M.show_library() end)
       end)
+      map('i', '<C-t>', function()
+        local selection = action_state.get_selected_entry()
+        if selection then
+          actions.close(prompt_bufnr)
+          vim.ui.input({ prompt = "Tag: ", default = selection.book.tag or "" }, function(input)
+            if input ~= nil then
+              library.set_book_tag(selection.book.slug, input)
+              vim.notify("Tag updated for: " .. selection.book.title, vim.log.levels.INFO)
+            end
+            vim.schedule(function() M.show_library() end)
+          end)
+        end
+      end)
+      map('n', '<C-t>', function()
+        local selection = action_state.get_selected_entry()
+        if selection then
+          actions.close(prompt_bufnr)
+          vim.ui.input({ prompt = "Tag: ", default = selection.book.tag or "" }, function(input)
+            if input ~= nil then
+              library.set_book_tag(selection.book.slug, input)
+              vim.notify("Tag updated for: " .. selection.book.title, vim.log.levels.INFO)
+            end
+            vim.schedule(function() M.show_library() end)
+          end)
+        end
+      end)
       return true
     end
   }):find()
@@ -120,19 +177,25 @@ end
 function M.show_library_floating(books)
   local lines = {}
   local book_map = {}
-  table.insert(lines, "Library (press Enter to open, q to close)")
-  table.insert(lines, string.rep("─", 75))
+  table.insert(lines, "Library (press Enter to open, t to tag, d to delete, q to close)")
+  table.insert(lines, string.rep("─", 95))
   for i, book in ipairs(books) do
     local progress = math.floor((book.chapter / book.total_chapters) * 100)
     local last_opened = library.format_last_opened(book.last_opened)
     local author = book.author or "Unknown"
-    local line = string.format(" %d. %-25s │ %-15s │ %3d%% │ %s", i, book.title:sub(1, 25), author:sub(1, 15), progress, last_opened)
+    local tag = book.tag or ""
+    local title_str = fit_string(book.title, 30)
+    local author_str = fit_string(author, 20)
+    local tag_str = fit_string(tag, 15)
+    local progress_str = string.format("%3d%%", progress)
+
+    local line = string.format(" %s │ %s │ %s │ %s │ %s", title_str, author_str, tag_str, progress_str, last_opened)
     table.insert(lines, line)
     book_map[#lines] = book
   end
-  table.insert(lines, ""); table.insert(lines, " Press Enter to open, d to delete, q to close")
+  table.insert(lines, ""); table.insert(lines, " Press Enter to open, t to tag, d to delete, q to close")
 
-  local width = 80
+  local width = 100
   local height = math.min(#lines, 20)
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -175,6 +238,20 @@ function M.show_library_floating(books)
       vim.notify("Removed: " .. book.title, vim.log.levels.INFO)
       close_window()
       vim.schedule(function() M.show_library() end)
+    end
+  end, { buffer = buf })
+  vim.keymap.set("n", "t", function()
+    local cursor = vim.api.nvim_win_get_cursor(win)
+    local book = book_map[cursor[1]]
+    if book then
+      close_window()
+      vim.ui.input({ prompt = "Tag: ", default = book.tag or "" }, function(input)
+        if input ~= nil then
+          library.set_book_tag(book.slug, input)
+          vim.notify("Tag updated for: " .. book.title, vim.log.levels.INFO)
+        end
+        vim.schedule(function() M.show_library() end)
+      end)
     end
   end, { buffer = buf })
   vim.api.nvim_win_set_cursor(win, {3, 0})
