@@ -1,8 +1,10 @@
 # ink.nvim
 
-A minimalist, distraction-free EPUB and Markdown reader for Neovim.
+> A minimalist, distraction-free EPUB and Markdown reader for Neovim.
 
-Read books and documents without leaving your editor. Full support for EPUB files and Markdown documents with highlights, notes, bookmarks, and more.
+Read books and documents without leaving your editor. Full support for EPUB files and Markdown documents with persistent highlights, notes, bookmarks, and powerful search capabilities.
+
+**Non-destructive**: All annotations (highlights, notes, bookmarks) are stored separately and never modify your original files.
 
 **Quick Start:**
 ```vim
@@ -457,5 +459,15 @@ A comprehensive test EPUB (and MD) (`ink-test.epub(.md)`) is included to demonst
 
 All features (TOC, highlights, bookmarks, notes, search, export) work the same as EPUBs.
 
+## Contributing
+
+Contributions are welcome! Feel free to open issues or submit pull requests.
+
+
+## Author
+
+Created by [DanielPonte01](https://github.com/DanielPonte01)
+
 ## License
-GPL-3.0
+
+GPL-3.0 - See [LICENSE](LICENSE) for details.
