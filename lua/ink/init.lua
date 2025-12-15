@@ -61,6 +61,20 @@ local default_config = {
     include_bookmarks = false,
     include_context = false,
     export_dir = "~/Documents",    -- Default export directory
+  },
+  typography = {
+    line_spacing = 1,              -- Lines between each line of text (1 = normal, 2 = double space)
+    paragraph_spacing = 1,         -- Lines between paragraphs
+    indent_size = 4,               -- Indent size for blockquotes, code blocks, definitions
+    list_indent = 2,               -- Indent size for nested lists
+  },
+  typography_keymaps = {
+    line_spacing_increase = "<leader>l+",
+    line_spacing_decrease = "<leader>l-",
+    line_spacing_reset = "<leader>l=",
+    paragraph_spacing_increase = "<leader>p+",
+    paragraph_spacing_decrease = "<leader>p-",
+    paragraph_spacing_reset = "<leader>p=",
   }
 }
 

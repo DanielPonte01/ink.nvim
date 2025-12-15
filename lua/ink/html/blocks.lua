@@ -20,15 +20,15 @@ function M.handle_closing_tag(state, tag_name)
     if #state.list_stack > 0 then
       table.remove(state.list_stack)
     end
-    text.new_line(state)
+    text.paragraph_break(state)
   elseif tag_name == "li" then
     text.new_line(state)
   elseif tag_name == "blockquote" then
     state.blockquote_depth = math.max(0, state.blockquote_depth - 1)
-    text.new_line(state)
+    text.paragraph_break(state)
   elseif tag_name == "pre" then
     state.in_pre = false
-    text.new_line(state)
+    text.paragraph_break(state)
   elseif tag_name == "dd" then
     state.in_dd = false
     text.new_line(state)
@@ -77,9 +77,9 @@ function M.handle_closing_tag(state, tag_name)
     state.current_heading_id = nil
     state.current_heading_title_attr = nil
     state.current_heading_is_title = false
-    text.new_line(state)
+    text.paragraph_break(state)
   elseif tokens.block_tags[tag_name] then
-    text.new_line(state)
+    text.paragraph_break(state)
   end
 
   for i = #state.style_stack, 1, -1 do
@@ -107,10 +107,10 @@ function M.handle_opening_tag(state, tag_name, tag_content, start_tag, end_tag, 
     text.new_line(state)
     state.in_title = true
   elseif tag_name == "ul" then
-    text.new_line(state)
+    text.paragraph_break(state)
     table.insert(state.list_stack, { type = "ul", level = #state.list_stack + 1 })
   elseif tag_name == "ol" then
-    text.new_line(state)
+    text.paragraph_break(state)
     table.insert(state.list_stack, { type = "ol", level = #state.list_stack + 1, counter = 0 })
   elseif tag_name == "li" then
     text.new_line(state)
@@ -131,10 +131,10 @@ function M.handle_opening_tag(state, tag_name, tag_content, start_tag, end_tag, 
       table.insert(state.highlights, { #state.lines + 1, #indent, #state.current_line, "InkListItem" })
     end
   elseif tag_name == "blockquote" then
-    text.new_line(state)
+    text.paragraph_break(state)
     state.blockquote_depth = state.blockquote_depth + 1
   elseif tag_name == "pre" then
-    text.new_line(state)
+    text.paragraph_break(state)
 
     local pre_close_pattern = "</pre>"
     local pre_content_start = end_tag + 1
@@ -159,9 +159,9 @@ function M.handle_opening_tag(state, tag_name, tag_content, start_tag, end_tag, 
     text.new_line(state)
     state.in_dd = true
   elseif tag_name == "dt" or tag_name == "dl" then
-    text.new_line(state)
+    text.paragraph_break(state)
   elseif tag_name:match("^h[1-6]$") then
-    text.new_line(state)
+    text.paragraph_break(state)
     state.in_heading = true
     state.current_heading_level = tonumber(tag_name:match("h([1-6])"))
     state.current_heading_text = ""
@@ -172,7 +172,7 @@ function M.handle_opening_tag(state, tag_name, tag_content, start_tag, end_tag, 
     local title_attr = tag_content:match('title=["\']([^"\']+)["\']')
     state.current_heading_title_attr = title_attr
   elseif tokens.block_tags[tag_name] then
-    text.new_line(state)
+    text.paragraph_break(state)
   end
 
   local href = nil

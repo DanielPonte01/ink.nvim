@@ -6,7 +6,7 @@ local table_module = require("ink.html.table")
 
 local M = {}
 
-function M.parse(content, max_width, class_styles, justify_text)
+function M.parse(content, max_width, class_styles, justify_text, typography)
   local lines = {}
   local highlights = {}
   local links = {}
@@ -32,6 +32,14 @@ function M.parse(content, max_width, class_styles, justify_text)
   local current_heading_title_attr = nil
   local current_heading_is_title = false
   local table_state = table_module.new_table_state()
+
+  -- Default typography settings if not provided
+  typography = typography or {
+    line_spacing = 1,
+    paragraph_spacing = 1,
+    indent_size = 4,
+    list_indent = 2
+  }
 
   local state = {
     lines = lines,
@@ -59,7 +67,8 @@ function M.parse(content, max_width, class_styles, justify_text)
     current_heading_is_title = current_heading_is_title,
     max_width = max_width,
     class_styles = class_styles,
-    table_state = table_state
+    table_state = table_state,
+    typography = typography
   }
 
   -- Main parsing loop

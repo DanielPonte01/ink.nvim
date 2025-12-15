@@ -95,6 +95,27 @@ function M.setup_basic_keymaps(buf)
   if keymaps.toggle_justify then
     vim.api.nvim_buf_set_keymap(buf, "n", keymaps.toggle_justify, ":lua require('ink.ui').toggle_justify()<CR>", opts)
   end
+
+  -- Typography keymaps
+  local typography_keymaps = context.config.typography_keymaps or {}
+  if typography_keymaps.line_spacing_increase then
+    vim.api.nvim_buf_set_keymap(buf, "n", typography_keymaps.line_spacing_increase, ":lua require('ink.ui').increase_line_spacing()<CR>", opts)
+  end
+  if typography_keymaps.line_spacing_decrease then
+    vim.api.nvim_buf_set_keymap(buf, "n", typography_keymaps.line_spacing_decrease, ":lua require('ink.ui').decrease_line_spacing()<CR>", opts)
+  end
+  if typography_keymaps.line_spacing_reset then
+    vim.api.nvim_buf_set_keymap(buf, "n", typography_keymaps.line_spacing_reset, ":lua require('ink.ui').reset_line_spacing()<CR>", opts)
+  end
+  if typography_keymaps.paragraph_spacing_increase then
+    vim.api.nvim_buf_set_keymap(buf, "n", typography_keymaps.paragraph_spacing_increase, ":lua require('ink.ui').increase_paragraph_spacing()<CR>", opts)
+  end
+  if typography_keymaps.paragraph_spacing_decrease then
+    vim.api.nvim_buf_set_keymap(buf, "n", typography_keymaps.paragraph_spacing_decrease, ":lua require('ink.ui').decrease_paragraph_spacing()<CR>", opts)
+  end
+  if typography_keymaps.paragraph_spacing_reset then
+    vim.api.nvim_buf_set_keymap(buf, "n", typography_keymaps.paragraph_spacing_reset, ":lua require('ink.ui').reset_paragraph_spacing()<CR>", opts)
+  end
 end
 
 -- Setup all book-specific keymaps

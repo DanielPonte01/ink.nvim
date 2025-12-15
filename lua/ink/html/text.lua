@@ -9,17 +9,19 @@ local M = {}
 
 function M.get_indent(state)
   local indent = ""
+  local typography = state.typography or { indent_size = 4, list_indent = 2 }
+
   if state.blockquote_depth > 0 then
     for i = 1, state.blockquote_depth do
       indent = indent .. "│ "
     end
-    indent = indent .. "  "
+    indent = indent .. string.rep(" ", typography.indent_size - 2)
   end
   if #state.list_stack > 0 then
-    indent = indent .. string.rep("  ", #state.list_stack)
+    indent = indent .. string.rep(" ", typography.list_indent * #state.list_stack)
   end
   if state.in_dd then
-    indent = indent .. "    "
+    indent = indent .. string.rep(" ", typography.indent_size)
   end
   return indent
 end
@@ -41,6 +43,16 @@ function M.new_line(state)
     state.current_line = ""
     state.line_start_indent = 0
   elseif #state.lines == 0 or state.lines[#state.lines] ~= "" then
+    table.insert(state.lines, "")
+  end
+end
+
+-- Add paragraph break with spacing based on typography settings
+function M.paragraph_break(state)
+  M.new_line(state)
+  local typography = state.typography or { paragraph_spacing = 1 }
+  -- Add extra blank lines for paragraph spacing (spacing - 1 because new_line already added one)
+  for i = 1, typography.paragraph_spacing - 1 do
     table.insert(state.lines, "")
   end
 end

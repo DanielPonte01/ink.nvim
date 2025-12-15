@@ -25,6 +25,12 @@ M.increase_width = navigation.increase_width
 M.decrease_width = navigation.decrease_width
 M.reset_width = navigation.reset_width
 M.toggle_justify = navigation.toggle_justify
+M.increase_line_spacing = navigation.increase_line_spacing
+M.decrease_line_spacing = navigation.decrease_line_spacing
+M.reset_line_spacing = navigation.reset_line_spacing
+M.increase_paragraph_spacing = navigation.increase_paragraph_spacing
+M.decrease_paragraph_spacing = navigation.decrease_paragraph_spacing
+M.reset_paragraph_spacing = navigation.reset_paragraph_spacing
 
 -- Re-export Render/TOC
 M.render_chapter = render.render_chapter

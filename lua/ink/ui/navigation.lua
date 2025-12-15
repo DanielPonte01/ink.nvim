@@ -290,4 +290,150 @@ function M.toggle_justify()
   vim.notify("Justify: " .. (context.config.justify_text and "on" or "off"), vim.log.levels.INFO)
 end
 
+function M.increase_line_spacing()
+  local ctx = context.current()
+  if not ctx then return end
+
+  -- Ensure typography config exists
+  context.config.typography = context.config.typography or {
+    line_spacing = 1,
+    paragraph_spacing = 1,
+    indent_size = 4,
+    list_indent = 2
+  }
+
+  local current = context.config.typography.line_spacing
+  local new_spacing = math.min(5, current + 1)  -- Max 5
+  context.config.typography.line_spacing = new_spacing
+
+  -- Invalidate cache since parsing depends on typography
+  ctx.parsed_chapters = {}
+  ctx.search_index = nil
+  local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
+  render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
+
+  vim.notify("Line spacing: " .. new_spacing, vim.log.levels.INFO)
+end
+
+function M.decrease_line_spacing()
+  local ctx = context.current()
+  if not ctx then return end
+
+  -- Ensure typography config exists
+  context.config.typography = context.config.typography or {
+    line_spacing = 1,
+    paragraph_spacing = 1,
+    indent_size = 4,
+    list_indent = 2
+  }
+
+  local current = context.config.typography.line_spacing
+  local new_spacing = math.max(1, current - 1)  -- Min 1
+  context.config.typography.line_spacing = new_spacing
+
+  -- Invalidate cache since parsing depends on typography
+  ctx.parsed_chapters = {}
+  ctx.search_index = nil
+  local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
+  render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
+
+  vim.notify("Line spacing: " .. new_spacing, vim.log.levels.INFO)
+end
+
+function M.increase_paragraph_spacing()
+  local ctx = context.current()
+  if not ctx then return end
+
+  -- Ensure typography config exists
+  context.config.typography = context.config.typography or {
+    line_spacing = 1,
+    paragraph_spacing = 1,
+    indent_size = 4,
+    list_indent = 2
+  }
+
+  local current = context.config.typography.paragraph_spacing
+  local new_spacing = math.min(5, current + 1)  -- Max 5
+  context.config.typography.paragraph_spacing = new_spacing
+
+  -- Invalidate cache since parsing depends on typography
+  ctx.parsed_chapters = {}
+  ctx.search_index = nil
+  local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
+  render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
+
+  vim.notify("Paragraph spacing: " .. new_spacing, vim.log.levels.INFO)
+end
+
+function M.decrease_paragraph_spacing()
+  local ctx = context.current()
+  if not ctx then return end
+
+  -- Ensure typography config exists
+  context.config.typography = context.config.typography or {
+    line_spacing = 1,
+    paragraph_spacing = 1,
+    indent_size = 4,
+    list_indent = 2
+  }
+
+  local current = context.config.typography.paragraph_spacing
+  local new_spacing = math.max(1, current - 1)  -- Min 1
+  context.config.typography.paragraph_spacing = new_spacing
+
+  -- Invalidate cache since parsing depends on typography
+  ctx.parsed_chapters = {}
+  ctx.search_index = nil
+  local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
+  render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
+
+  vim.notify("Paragraph spacing: " .. new_spacing, vim.log.levels.INFO)
+end
+
+function M.reset_line_spacing()
+  local ctx = context.current()
+  if not ctx then return end
+
+  -- Ensure typography config exists
+  context.config.typography = context.config.typography or {
+    line_spacing = 1,
+    paragraph_spacing = 1,
+    indent_size = 4,
+    list_indent = 2
+  }
+
+  context.config.typography.line_spacing = 1
+
+  -- Invalidate cache since parsing depends on typography
+  ctx.parsed_chapters = {}
+  ctx.search_index = nil
+  local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
+  render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
+
+  vim.notify("Line spacing reset: 1", vim.log.levels.INFO)
+end
+
+function M.reset_paragraph_spacing()
+  local ctx = context.current()
+  if not ctx then return end
+
+  -- Ensure typography config exists
+  context.config.typography = context.config.typography or {
+    line_spacing = 1,
+    paragraph_spacing = 1,
+    indent_size = 4,
+    list_indent = 2
+  }
+
+  context.config.typography.paragraph_spacing = 1
+
+  -- Invalidate cache since parsing depends on typography
+  ctx.parsed_chapters = {}
+  ctx.search_index = nil
+  local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
+  render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
+
+  vim.notify("Paragraph spacing reset: 1", vim.log.levels.INFO)
+end
+
 return M

@@ -6,8 +6,8 @@ M.parser = require("ink.html.parser")
 M.formatter = require("ink.html.formatter")
 M.utils = require("ink.html.utils")
 
-function M.parse(content, max_width, class_styles, justify_text)
-  return M.parser.parse(content, max_width, class_styles, justify_text)
+function M.parse(content, max_width, class_styles, justify_text, typography)
+  return M.parser.parse(content, max_width, class_styles, justify_text, typography)
 end
 
 M.forward_map_column = M.utils.forward_map_column
