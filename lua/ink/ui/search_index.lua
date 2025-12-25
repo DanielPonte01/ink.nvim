@@ -34,8 +34,10 @@ function M.load_cached_index(slug, total_chapters)
 	end
 
 	-- Validate cache
-	if cached.version ~= 1 or cached.total_chapters ~= total_chapters then
+	if cached.version ~= 2 or cached.total_chapters ~= total_chapters then
 		-- Cache is invalid (different version or chapter count)
+		-- Delete old cache file
+		os.remove(path)
 		return nil
 	end
 
@@ -54,7 +56,7 @@ function M.save_index_to_cache(slug, entries, total_chapters)
 
 	-- Create cache data
 	local cache_data = {
-		version = 1,
+		version = 2,  -- Version 2: uses parsed chapters (line numbers match rendered output)
 		created_at = os.time(),
 		total_chapters = total_chapters,
 		total_entries = #entries,
@@ -105,7 +107,7 @@ function M.get_chapter_name(chapter_idx, ctx)
   return "Ch. " .. chapter_idx
 end
 
--- Build search index asynchronously for large books (optimized with plain text extraction)
+-- Build search index asynchronously for large books (uses parsed chapters for accuracy)
 function M.build_search_index_async(ctx, callback, progress_callback)
   local entries = {}
   local chapter_idx = 1
@@ -127,15 +129,13 @@ function M.build_search_index_async(ctx, callback, progress_callback)
       progress_callback(chapter_idx, total)
     end
 
-    -- Get chapter content and extract plain text (fast, no full HTML parsing)
-    local content = render.get_chapter_content(chapter_idx, ctx)
-    if content then
-      local plain_text = render.extract_plain_text(content)
+    -- Get parsed chapter (uses cache if available)
+    local parsed = render.get_parsed_chapter(chapter_idx, ctx)
+    if parsed and parsed.lines then
       local chapter_name = M.get_chapter_name(chapter_idx, ctx)
 
-      -- Split into lines for search
-      local lines = vim.split(plain_text, "\n", { plain = true })
-      for line_num, line_text in ipairs(lines) do
+      -- Index each line from parsed chapter
+      for line_num, line_text in ipairs(parsed.lines) do
         local trimmed = line_text:match("^%s*(.-)%s*$")
         if trimmed and #trimmed > 0 then
           local display_text = trimmed
@@ -161,7 +161,7 @@ function M.build_search_index_async(ctx, callback, progress_callback)
   process_next()
 end
 
--- Build search index from all chapters (synchronous, optimized with plain text)
+-- Build search index from all chapters (synchronous, uses parsed chapters)
 function M.build_search_index(ctx)
   local entries = {}
   local total_chapters = #ctx.data.spine
@@ -173,15 +173,13 @@ function M.build_search_index(ctx)
   end
 
   for chapter_idx = 1, total_chapters do
-    -- Get chapter content and extract plain text (fast, no full HTML parsing)
-    local content = render.get_chapter_content(chapter_idx, ctx)
-    if content then
-      local plain_text = render.extract_plain_text(content)
+    -- Get parsed chapter (uses cache if available)
+    local parsed = render.get_parsed_chapter(chapter_idx, ctx)
+    if parsed and parsed.lines then
       local chapter_name = M.get_chapter_name(chapter_idx, ctx)
 
-      -- Split into lines for search
-      local lines = vim.split(plain_text, "\n", { plain = true })
-      for line_num, line_text in ipairs(lines) do
+      -- Index each line from parsed chapter
+      for line_num, line_text in ipairs(parsed.lines) do
         -- Ignore empty lines or only spaces
         local trimmed = line_text:match("^%s*(.-)%s*$")
         if trimmed and #trimmed > 0 then

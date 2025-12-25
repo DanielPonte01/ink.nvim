@@ -6,6 +6,37 @@ local fs = require("ink.fs")
 
 local M = {}
 
+-- Validate export path for safety
+local function validate_export_path(path)
+  -- Resolve and normalize path
+  local resolved = vim.fn.resolve(vim.fn.fnamemodify(path, ":p"))
+
+  -- List of unsafe system directories
+  local unsafe_dirs = {
+    "/etc", "/bin", "/sbin", "/usr/bin", "/usr/sbin",
+    "/boot", "/dev", "/proc", "/sys", "/var/log",
+    "/root", "/lib", "/lib64"
+  }
+
+  -- Check if path starts with any unsafe directory
+  for _, unsafe_dir in ipairs(unsafe_dirs) do
+    if resolved:match("^" .. unsafe_dir .. "/") or resolved == unsafe_dir then
+      return false, "Cannot export to system directory: " .. unsafe_dir
+    end
+  end
+
+  -- Warn if path is outside home directory (but allow it)
+  local home_dir = vim.fn.expand("~")
+  if not resolved:match("^" .. vim.pesc(home_dir)) then
+    vim.notify(
+      "Warning: Exporting to location outside home directory",
+      vim.log.levels.WARN
+    )
+  end
+
+  return true, nil
+end
+
 -- Export book to file
 -- @param slug: book slug identifier
 -- @param format: "markdown" or "json"
@@ -21,6 +52,13 @@ function M.export_book(slug, format, options, output_path)
 
   if not output_path or output_path == "" then
     vim.notify("Invalid output path", vim.log.levels.ERROR)
+    return false
+  end
+
+  -- Validate export path for safety
+  local valid, err = validate_export_path(output_path)
+  if not valid then
+    vim.notify(err, vim.log.levels.ERROR)
     return false
   end
 

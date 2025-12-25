@@ -6,10 +6,28 @@ local M = {}
 local fs = require("ink.fs")
 local data = require("ink.library.data")
 
+-- Validate directory path for safe characters
+local function is_safe_path(path)
+	-- Path should not contain shell metacharacters or suspicious patterns
+	-- Allow: alphanumeric, /, -, _, ., ~, space
+	if path:match("[;&|`$<>%(%){}%[%]!]") then
+		return false
+	end
+	return true
+end
+
 -- Scan directory for EPUB and Markdown files (async)
 function M.scan_directory(directory, callback)
 	-- Expand and normalize directory path
 	directory = vim.fn.fnamemodify(vim.fn.expand(directory), ":p")
+
+	-- Validate path for security
+	if not is_safe_path(directory) then
+		if callback then
+			callback(nil, "Invalid directory path: contains unsafe characters")
+		end
+		return
+	end
 
 	if not fs.exists(directory) then
 		if callback then

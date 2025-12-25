@@ -41,10 +41,35 @@ function M.remove_note()
   local hl = util.get_highlight_at_cursor(ctx)
   if not hl then vim.notify("No highlight under cursor", vim.log.levels.WARN); return end
   if not hl.note or hl.note == "" then vim.notify("No note on this highlight", vim.log.levels.INFO); return end
-  user_highlights.update_note(ctx.data.slug, hl, "")
-  local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
-  render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
-  vim.notify("Note removed", vim.log.levels.INFO)
+
+  -- Require confirmation
+  local is_transparent = hl.color == "none"
+  local prompt = "Delete note? (y/N): "
+
+  vim.ui.input({ prompt = prompt }, function(input)
+    if not input or (input:lower() ~= "y" and input:lower() ~= "yes") then
+      vim.notify("Cancelled", vim.log.levels.INFO)
+      return
+    end
+
+    local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
+
+    -- If transparent highlight, delete the entire highlight (since it only exists for the note)
+    if is_transparent then
+      user_highlights.remove_highlight_by_text(ctx.data.slug, hl)
+      render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
+      vim.notify("Note removed", vim.log.levels.INFO)
+    else
+      -- Otherwise just remove the note, keeping the highlight
+      user_highlights.update_note(ctx.data.slug, hl, "")
+      render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
+      vim.notify("Note removed", vim.log.levels.INFO)
+    end
+
+    if ctx.content_win and vim.api.nvim_win_is_valid(ctx.content_win) then
+      vim.api.nvim_win_set_cursor(ctx.content_win, cursor)
+    end
+  end)
 end
 
 function M.add_highlight(color)
@@ -114,12 +139,146 @@ function M.remove_highlight()
   local line = cursor[1]
   local hl = util.get_highlight_at_cursor(ctx)
   if not hl then vim.notify("No highlight under cursor", vim.log.levels.WARN); return end
-  user_highlights.remove_highlight_by_text(ctx.data.slug, hl)
-  render.render_chapter(ctx.current_chapter_idx, line, ctx)
-  if ctx.content_win and vim.api.nvim_win_is_valid(ctx.content_win) then
-    vim.api.nvim_win_set_cursor(ctx.content_win, cursor)
+
+  -- Check if highlight has a note
+  local has_note = hl.note and hl.note ~= ""
+
+  if has_note then
+    -- Require confirmation if highlight has a note
+    vim.ui.input({ prompt = "Delete highlight and note? (y/N): " }, function(input)
+      if not input or (input:lower() ~= "y" and input:lower() ~= "yes") then
+        vim.notify("Cancelled", vim.log.levels.INFO)
+        return
+      end
+
+      user_highlights.remove_highlight_by_text(ctx.data.slug, hl)
+      render.render_chapter(ctx.current_chapter_idx, line, ctx)
+      if ctx.content_win and vim.api.nvim_win_is_valid(ctx.content_win) then
+        vim.api.nvim_win_set_cursor(ctx.content_win, cursor)
+      end
+      vim.notify(" Highlight and note removed", vim.log.levels.INFO)
+    end)
+  else
+    -- No note, delete immediately
+    user_highlights.remove_highlight_by_text(ctx.data.slug, hl)
+    render.render_chapter(ctx.current_chapter_idx, line, ctx)
+    if ctx.content_win and vim.api.nvim_win_is_valid(ctx.content_win) then
+      vim.api.nvim_win_set_cursor(ctx.content_win, cursor)
+    end
+    vim.notify("Highlight removed", vim.log.levels.INFO)
   end
-  vim.notify("Highlight removed", vim.log.levels.INFO)
+end
+
+function M.change_highlight_color(color)
+  local ctx = context.current()
+  if not ctx then return end
+
+  local buf = vim.api.nvim_get_current_buf()
+  if buf ~= ctx.content_buf then
+    vim.notify("Color change only works in content buffer", vim.log.levels.WARN)
+    return
+  end
+
+  -- Validate color exists in config
+  if not context.config.highlight_colors[color] then
+    vim.notify("Unknown highlight color: " .. color, vim.log.levels.ERROR)
+    return
+  end
+
+  -- Get highlight at cursor
+  local hl = util.get_highlight_at_cursor(ctx)
+  if not hl then
+    vim.notify("No highlight under cursor", vim.log.levels.WARN)
+    return
+  end
+
+  -- Don't change if already this color
+  if hl.color == color then
+    vim.notify("Highlight already " .. color, vim.log.levels.INFO)
+    return
+  end
+
+  local old_color = hl.color
+
+  -- Update color
+  user_highlights.update_color(ctx.data.slug, hl, color)
+
+  -- Re-render to show new color
+  local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
+  render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
+
+  vim.notify("Changed highlight from " .. old_color .. " to " .. color, vim.log.levels.INFO)
+end
+
+function M.add_note_on_selection()
+  local ctx = context.current()
+  if not ctx then return end
+  local buf = vim.api.nvim_get_current_buf()
+  if buf ~= ctx.content_buf then
+    vim.notify("Notes can only be added in the content buffer", vim.log.levels.WARN)
+    return
+  end
+
+  -- Extract selection (same as add_highlight)
+  local start_pos = vim.fn.getpos("'<")
+  local end_pos = vim.fn.getpos("'>")
+  local start_line = start_pos[2]
+  local start_col = start_pos[3] - 1
+  local end_line = end_pos[2]
+  local end_col = end_pos[3]
+
+  local lines = vim.api.nvim_buf_get_lines(ctx.content_buf, start_line - 1, end_line, false)
+  local text
+  if #lines == 1 then
+    text = lines[1]:sub(start_col + 1, end_col)
+  else
+    lines[1] = lines[1]:sub(start_col + 1)
+    lines[#lines] = lines[#lines]:sub(1, end_col)
+    text = table.concat(lines, "\n")
+  end
+
+  local context_len = 30
+  local full_text = util.get_full_text(ctx.rendered_lines)
+  local start_offset = util.line_col_to_offset(ctx.rendered_lines, start_line, start_col)
+  local end_offset = util.line_col_to_offset(ctx.rendered_lines, end_line, end_col)
+  local context_before = ""
+  local context_after = ""
+
+  if start_offset > 0 then
+    local ctx_start = math.max(0, start_offset - context_len)
+    context_before = full_text:sub(ctx_start + 1, start_offset)
+  end
+  if end_offset < #full_text then
+    local ctx_end = math.min(#full_text, end_offset + context_len)
+    context_after = full_text:sub(end_offset + 1, ctx_end)
+  end
+
+  text = util.normalize_whitespace(text)
+  context_before = util.normalize_whitespace(context_before)
+  context_after = util.normalize_whitespace(context_after)
+
+  -- Create invisible highlight with note
+  local highlight = {
+    chapter = ctx.current_chapter_idx,
+    text = text,
+    context_before = context_before,
+    context_after = context_after,
+    color = "none"
+  }
+
+  -- Open note input modal
+  modals.open_note_input("", function(note_text)
+    if note_text and note_text ~= "" then
+      -- Add highlight with note
+      user_highlights.add_highlight(ctx.data.slug, highlight)
+      user_highlights.update_note(ctx.data.slug, highlight, note_text)
+      render.render_chapter(ctx.current_chapter_idx, end_line, ctx)
+      if ctx.content_win and vim.api.nvim_win_is_valid(ctx.content_win) then
+        vim.api.nvim_win_set_cursor(ctx.content_win, {end_line, end_col})
+      end
+      vim.notify("Note added", vim.log.levels.INFO)
+    end
+  end)
 end
 
 return M

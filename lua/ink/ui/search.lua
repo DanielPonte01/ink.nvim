@@ -163,37 +163,124 @@ local function open_search_picker(search_entries, initial_text, ctx, use_live_se
     finder = finder,
     sorter = sorters.get_fzy_sorter(),  -- Fuzzy matching
     previewer = previewers.new_buffer_previewer({
-      title = "Chapter Preview",
-      define_preview = function(self, entry)
+      title = "Context Preview",
+      define_preview = function(self, entry, status)
         local parsed = render.get_parsed_chapter(entry.chapter_idx, ctx)
         if not parsed then
           vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, {"Error loading chapter"})
           return
         end
 
-        vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, parsed.lines)
+        -- Get search query from picker
+        local picker = action_state.get_current_picker(status.picker.prompt_bufnr)
+        local search_query = picker and picker:_get_prompt() or ""
+
+        -- Extract context around found line (3 lines before, match line, 3 lines after)
+        local context_lines = 3
+        local preview_lines = {}
+        local highlight_offset = 0
+        local match_line_positions = {}  -- Store positions for word highlighting
+
+        if entry.line_num and entry.line_num > 0 then
+          local total_lines = #parsed.lines
+          local start_line = math.max(1, entry.line_num - context_lines)
+          local end_line = math.min(total_lines, entry.line_num + context_lines)
+
+          -- Build chapter info header
+          local chapter_name = entry.value.chapter_name or "Chapter " .. entry.chapter_idx
+          local chapter_progress = math.floor((entry.line_num / total_lines) * 100)
+          local book_chapter_idx = entry.chapter_idx
+          local total_chapters = #ctx.data.spine
+          local book_progress = math.floor((book_chapter_idx / total_chapters) * 100)
+
+          -- Header lines
+          table.insert(preview_lines, "📖 " .. chapter_name)
+          if search_query and search_query ~= "" then
+            table.insert(preview_lines, "🔍 Searching: \"" .. search_query .. "\"")
+          end
+          table.insert(preview_lines, string.format("📍 Line %d of %d (%d%% into chapter, %d%% into book)",
+            entry.line_num, total_lines, chapter_progress, book_progress))
+          table.insert(preview_lines, string.rep("─", 60))
+          table.insert(preview_lines, "")
+
+          local header_offset = #preview_lines
+
+          -- Add context lines without visual indicators
+          for i = start_line, end_line do
+            local line_text = parsed.lines[i]
+
+            if i == entry.line_num then
+              highlight_offset = #preview_lines
+              match_line_positions = {line_num = #preview_lines, text = line_text, prefix_len = 0}
+            end
+
+            table.insert(preview_lines, line_text)
+          end
+        else
+          -- Fallback: show full chapter
+          preview_lines = parsed.lines
+        end
+
+        vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, preview_lines)
         vim.api.nvim_set_option_value("filetype", "ink_content", { buf = self.state.bufnr })
 
-        -- Highlight found line and scroll to it
-        if entry.line_num and entry.line_num > 0 then
-          local total_lines = vim.api.nvim_buf_line_count(self.state.bufnr)
-          -- Validate line number is within buffer bounds
-          if entry.line_num <= total_lines then
-            local ns = vim.api.nvim_create_namespace("ink_search_preview")
-            vim.api.nvim_buf_add_highlight(self.state.bufnr, ns, "Search", entry.line_num - 1, 0, -1)
+        -- Enable line wrapping in preview window
+        if vim.api.nvim_win_is_valid(self.state.winid) then
+          vim.api.nvim_set_option_value("wrap", true, { win = self.state.winid })
+          vim.api.nvim_set_option_value("linebreak", true, { win = self.state.winid })
+        end
 
-            -- Defer scroll to ensure buffer is ready
-            local winid = self.state.winid
-            local line_num = entry.line_num
-            vim.defer_fn(function()
-              if vim.api.nvim_win_is_valid(winid) then
-                pcall(vim.api.nvim_win_set_cursor, winid, {line_num, 0})
-                pcall(vim.api.nvim_win_call, winid, function()
-                  vim.cmd("normal! zz")
-                end)
-              end
-            end, 10)
+        -- Apply highlights
+        local ns = vim.api.nvim_create_namespace("ink_search_preview")
+
+        if highlight_offset > 0 and highlight_offset < #preview_lines then
+          -- Highlight the word(s) in match line, not the whole line
+          if search_query and search_query ~= "" and match_line_positions.text then
+            local line_text = match_line_positions.text
+            local prefix_len = match_line_positions.prefix_len
+
+            -- Find all occurrences of search term (case insensitive)
+            local search_lower = search_query:lower()
+            local text_lower = line_text:lower()
+            local start_pos = 1
+
+            while true do
+              local match_start, match_end = text_lower:find(search_lower, start_pos, true)
+              if not match_start then break end
+
+              -- Highlight the matched word
+              vim.api.nvim_buf_add_highlight(
+                self.state.bufnr,
+                ns,
+                "IncSearch",  -- Bright highlight for matched words
+                match_line_positions.line_num,
+                prefix_len + match_start - 1,
+                prefix_len + match_end
+              )
+
+              start_pos = match_end + 1
+            end
+
+            -- Subtle background for the entire match line
+            vim.api.nvim_buf_add_highlight(self.state.bufnr, ns, "CursorLine", match_line_positions.line_num, 0, -1)
+          else
+            -- Fallback: highlight entire line if no search query
+            vim.api.nvim_buf_add_highlight(self.state.bufnr, ns, "CursorLine", highlight_offset, 0, -1)
           end
+
+          -- Context lines remain in normal color (no dimming)
+          -- Only the matched words are highlighted
+
+          -- Scroll to highlighted line
+          local winid = self.state.winid
+          vim.defer_fn(function()
+            if vim.api.nvim_win_is_valid(winid) then
+              pcall(vim.api.nvim_win_set_cursor, winid, {highlight_offset + 1, 0})
+              pcall(vim.api.nvim_win_call, winid, function()
+                vim.cmd("normal! zz")
+              end)
+            end
+          end, 10)
         end
       end
     }),

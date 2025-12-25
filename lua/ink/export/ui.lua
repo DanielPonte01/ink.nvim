@@ -91,7 +91,7 @@ function M.show_export_dialog()
   -- Verify book is open
   local ctx = context.current()
   if not ctx or not ctx.data then
-    vim.notify("Por favor, abra um livro primeiro para exportar", vim.log.levels.ERROR)
+    vim.notify("Please open a book first to export", vim.log.levels.ERROR)
     return
   end
 
@@ -114,7 +114,7 @@ function M.show_export_dialog()
     local success = export.export_book(slug, format, options, output_path)
 
     if success then
-      vim.notify("✓ Exportado: " .. output_path, vim.log.levels.INFO)
+      vim.notify("✓ Exported: " .. output_path, vim.log.levels.INFO)
     end
   end)
 end

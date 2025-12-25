@@ -20,9 +20,19 @@ local function find_buf_by_name(name)
 end
 
 -- Create TOC and content buffers
-function M.create_book_buffers(slug)
-  local toc_name = "ink://" .. slug .. "/TOC"
-  local content_name = "ink://" .. slug .. "/content"
+function M.create_book_buffers(slug, book_data)
+  -- Use book title for buffer name (more user-friendly than slug)
+  local title = book_data and book_data.title or slug
+  local author = book_data and book_data.author
+
+  -- Create descriptive buffer names
+  local content_name
+  if author and author ~= "" then
+    content_name = "ink://" .. title .. " - " .. author
+  else
+    content_name = "ink://" .. title
+  end
+  local toc_name = content_name .. " [TOC]"
 
   -- Delete existing buffers if they exist
   local existing_toc = find_buf_by_name(toc_name)
@@ -143,10 +153,21 @@ function M.setup_book_keymaps(content_buf, toc_buf)
     end
   end
 
+  -- Change highlight color keymaps (content buffer only)
+  local highlight_change_color_keymaps = context.config.highlight_change_color_keymaps or {}
+  for color_name, keymap in pairs(highlight_change_color_keymaps) do
+    vim.api.nvim_buf_set_keymap(content_buf, "n", keymap,
+      string.format(":lua require('ink.ui').change_highlight_color('%s')<CR>", color_name),
+      keymap_opts)
+  end
+
   -- Note keymaps (content buffer only)
   local note_keymaps = context.config.note_keymaps or {}
   if note_keymaps.add then
+    -- Normal mode: add/edit note on existing highlight
     vim.api.nvim_buf_set_keymap(content_buf, "n", note_keymaps.add, ":lua require('ink.ui').add_note()<CR>", keymap_opts)
+    -- Visual mode: create note directly on selection
+    vim.api.nvim_buf_set_keymap(content_buf, "v", note_keymaps.add, ":lua require('ink.ui').add_note_on_selection()<CR>", keymap_opts)
   end
   if note_keymaps.edit then
     vim.api.nvim_buf_set_keymap(content_buf, "n", note_keymaps.edit, ":lua require('ink.ui').edit_note()<CR>", keymap_opts)
@@ -254,7 +275,7 @@ function M.open_book(book_data)
   reading_sessions.start_session(book_data.slug, 1)
 
   -- Create buffers
-  local content_buf, toc_buf = M.create_book_buffers(book_data.slug)
+  local content_buf, toc_buf = M.create_book_buffers(book_data.slug, book_data)
 
   -- Setup context
   local ctx = M.setup_book_context(content_buf, toc_buf, book_data)

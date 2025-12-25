@@ -73,42 +73,33 @@ use {
 
 Create a configuration file (e.g., `~/.config/nvim/after/plugin/ink.lua`) with your settings.
 
-Here's the complete default configuration with comments explaining each option:
+Default configuration:
 
 ```lua
 require("ink").setup({
-  -- Display settings
-  focused_mode = true,    -- Enable focused reading mode
-  image_open = true,      -- Allow opening images in external viewer
-  justify_text = false,   -- Enable text justification (adds spaces between words)
-  max_width = 120,        -- Maximum text width (for centering)
-  width_step = 10,        -- How much to change width per keypress
+  focused_mode = true,
+  image_open = true,
+  justify_text = false,
+  max_width = 120,
+  width_step = 10,
 
-  -- Navigation keymaps
   keymaps = {
-    next_chapter = "]c",            -- Navigate to next chapter
-    prev_chapter = "[c",            -- Navigate to previous chapter
-    toggle_toc = "<leader>t",       -- Toggle table of contents sidebar
-    activate = "<CR>",              -- Preview footnote/anchor or open image/URL/TOC entry
-    jump_to_link = "g<CR>",         -- Jump to link target (footnotes, anchors, cross-references)
-
-    -- Search features (requires telescope.nvim)
-    search_toc = "<leader>pit",           -- Search/filter chapters by name
-    search_content = "<leader>pif",       -- Search text within all chapters
-    search_mode_toggle = "<C-f>",         -- Toggle between TOC and content search
-
-    -- Width adjustment
-    width_increase = "<leader>+",   -- Increase text width
-    width_decrease = "<leader>-",   -- Decrease text width
-    width_reset = "<leader>=",      -- Reset text width to default
-    toggle_justify = "<leader>jt",  -- Toggle text justification
-
-    -- Library (global keymaps)
-    library = "<leader>eL",         -- Open library browser
-    last_book = "<leader>el",       -- Open last read book
+    next_chapter = "]c",
+    prev_chapter = "[c",
+    toggle_toc = "<leader>t",
+    activate = "<CR>",
+    jump_to_link = "g<CR>",
+    search_toc = "<leader>pit",
+    search_content = "<leader>pif",
+    search_mode_toggle = "<C-f>",
+    width_increase = "<leader>+",
+    width_decrease = "<leader>-",
+    width_reset = "<leader>=",
+    toggle_justify = "<leader>jt",
+    library = "<leader>eL",
+    last_book = "<leader>el",
   },
 
-  -- Highlight colors (customize with any hex colors you want)
   highlight_colors = {
     yellow = { bg = "#f9e2af", fg = "#000000" },
     green = { bg = "#a6e3a1", fg = "#000000" },
@@ -118,46 +109,48 @@ require("ink").setup({
     -- purple = { bg = "#cba6f7", fg = "#000000" },
   },
 
-  -- Highlight keymaps (visual mode for adding, normal mode for removing)
   highlight_keymaps = {
-    yellow = "<leader>hy",  -- Highlight selection in yellow
-    green = "<leader>hg",   -- Highlight selection in green
-    red = "<leader>hr",     -- Highlight selection in red
-    blue = "<leader>hb",    -- Highlight selection in blue
-    remove = "<leader>hd"   -- Remove highlight under cursor
-    -- Add more colors: purple, orange, pink, etc.
+    yellow = "<leader>hy",
+    green = "<leader>hg",
+    red = "<leader>hr",
+    blue = "<leader>hb",
     -- purple = "<leader>hp",    -- Highlight with your custom highlight
+    remove = "<leader>hd"
   },
 
-  -- Note keymaps (for annotations on highlights)
+  highlight_change_color_keymaps = {
+    yellow = "<leader>hcy",
+    green = "<leader>hcg",
+    red = "<leader>hcr",
+    -- purple = "<leader>hcp",    -- Change to your custom color
+    blue = "<leader>hcb"
+  },
+
   note_keymaps = {
-    add = "<leader>na",           -- Add/edit note on highlight under cursor
-    remove = "<leader>nd",        -- Remove note from highlight
-    toggle_display = "<leader>nt" -- Toggle note display (off/indicator/expanded)
+    add = "<leader>na",
+    remove = "<leader>nd",
+    toggle_display = "<leader>nt"
   },
 
-  -- Bookmark keymaps
   bookmark_keymaps = {
-    add = "<leader>ba",           -- Add/edit bookmark at paragraph
-    remove = "<leader>bd",        -- Remove bookmark at paragraph
-    next = "<leader>bn",          -- Go to next bookmark
-    prev = "<leader>bp",          -- Go to previous bookmark
-    list_all = "<leader>bl",      -- List all bookmarks (global)
-    list_book = "<leader>bb",     -- List bookmarks in current book (global)
+    add = "<leader>ba",
+    remove = "<leader>bd",
+    next = "<leader>bn",
+    prev = "<leader>bp",
+    list_all = "<leader>bl",
+    list_book = "<leader>bb",
   },
-  bookmark_icon = "📑",            -- Bookmark icon
+  bookmark_icon = "📑",
 
-  -- Export keymaps
   export_keymaps = {
-    current_book = "<leader>ex",  -- Export current book highlights/bookmarks
+    current_book = "<leader>ex",
   },
 
-  -- Export defaults
   export_defaults = {
-    format = "markdown",          -- Export format: "markdown" | "json"
-    include_bookmarks = false,    -- Include bookmarks in export
-    include_context = false,      -- Include context around highlights
-    export_dir = "~/Documents",   -- Default export directory
+    format = "markdown",
+    include_bookmarks = false,
+    include_context = false,
+    export_dir = "~/Documents",
   },
 })
 
@@ -211,6 +204,10 @@ vim.keymap.set("n", "<leader>le", ":InkEditLibrary", { desc = "Edit you library 
 - `<leader>hr` - Highlight selection in red (visual mode)
 - `<leader>hb` - Highlight selection in blue (visual mode)
 - `<leader>hd` - Remove highlight under cursor (normal mode)
+- `<leader>hcy` - Change highlight to yellow (normal mode)
+- `<leader>hcg` - Change highlight to green (normal mode)
+- `<leader>hcr` - Change highlight to red (normal mode)
+- `<leader>hcb` - Change highlight to blue (normal mode)
 
 **Notes (on highlights):**
 - `<leader>na` - Add/edit note on highlight under cursor
@@ -437,16 +434,15 @@ The search features integrate with Telescope to provide powerful book navigation
 1. Enter visual mode (`v` or `V`)
 2. Select text you want to highlight
 3. Press a highlight keymap (e.g., `<leader>hy` for yellow)
-4. To remove a highlight, place cursor on highlighted text and press `<leader>hd`
+4. To change color, place cursor on highlight and press change keymap (e.g., `<leader>hcr` for red)
+5. To remove a highlight, place cursor on highlighted text and press `<leader>hd`
 
 **Highlight Features:**
 - **Persistent**: Saved across sessions
 - **Book-specific**: Each EPUB has its own highlights
 - **Non-destructive**: Don't modify the original EPUB file
 - **Customizable**: Add unlimited colors in config
-
-**Adding Custom Colors:**
-You can add unlimited highlight colors by adding entries to both `highlight_colors` and `highlight_keymaps`:
+- **Color changing**: Change highlight color without recreating (preserves notes)
 
 ## Testing
 
@@ -458,11 +454,6 @@ A comprehensive test EPUB (and MD) (`ink-test.epub(.md)`) is included to demonst
 ```
 
 All features (TOC, highlights, bookmarks, notes, search, export) work the same as EPUBs.
-
-## Contributing
-
-Contributions are welcome! Feel free to open issues or submit pull requests.
-
 
 ## Author
 

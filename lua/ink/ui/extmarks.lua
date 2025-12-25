@@ -149,4 +149,203 @@ function M.apply_bookmarks(buf, chapter_bookmarks, padding, bookmark_icon, ns_id
     end
 end
 
+-- Helper: Resolve note conflicts by separating left/right margins
+local function resolve_note_conflicts(notes)
+    -- Separate notes by side (left/right)
+    local left_notes = {}
+    local right_notes = {}
+
+    for _, note_info in ipairs(notes) do
+        if note_info.is_left then
+            table.insert(left_notes, note_info)
+        else
+            table.insert(right_notes, note_info)
+        end
+    end
+
+    -- Sort each side by start line
+    table.sort(left_notes, function(a, b) return a.start_line < b.start_line end)
+    table.sort(right_notes, function(a, b) return a.start_line < b.start_line end)
+
+    -- Resolve conflicts on left side
+    local last_left_end = -1
+    for _, note_info in ipairs(left_notes) do
+        local display_line = note_info.start_line
+
+        -- Add 1 line gap between stacked notes
+        if display_line <= last_left_end then
+            display_line = last_left_end + 2
+        end
+
+        note_info.display_line = display_line
+        last_left_end = display_line + note_info.lines_count - 1
+    end
+
+    -- Resolve conflicts on right side
+    local last_right_end = -1
+    for _, note_info in ipairs(right_notes) do
+        local display_line = note_info.start_line
+
+        -- Add 1 line gap between stacked notes
+        if display_line <= last_right_end then
+            display_line = last_right_end + 2
+        end
+
+        note_info.display_line = display_line
+        last_right_end = display_line + note_info.lines_count - 1
+    end
+
+    -- Merge back (order doesn't matter)
+    local adjusted = {}
+    for _, note in ipairs(left_notes) do
+        table.insert(adjusted, note)
+    end
+    for _, note in ipairs(right_notes) do
+        table.insert(adjusted, note)
+    end
+
+    return adjusted
+end
+
+-- Helper: Apply a single margin note with numeric indicator
+local function apply_single_margin_note(buf, note_info, margin_width, ns_id)
+    local hl = note_info.hl
+    local is_left = note_info.is_left
+    local note_column = note_info.note_column
+    local wrapped_lines = note_info.wrapped_lines
+    local display_line = note_info.display_line
+    local note_number = note_info.note_number
+
+    -- Numeric indicator on the highlight line (at end of highlight)
+    local indicator = "[^" .. note_number .. "]"
+    vim.api.nvim_buf_set_extmark(buf, ns_id, hl._end_line - 1, hl._end_col, {
+        virt_text = {{indicator, "InkNoteIndicator"}},
+        virt_text_pos = "inline",
+        priority = 3000
+    })
+
+    -- Note text lines in margin
+    for i, line_text in ipairs(wrapped_lines) do
+        -- First line uses display_line (adjusted for conflicts), continuation lines flow below
+        local line_idx = display_line - 1 + (i - 1)
+
+        -- Add note number prefix on first line, indent continuation lines
+        local prefixed_text
+        if i == 1 then
+            prefixed_text = indicator .. " " .. line_text
+        else
+            -- Indent continuation lines to align with text after number
+            prefixed_text = "    " .. line_text
+        end
+
+        -- Format text based on side
+        local virt_text
+        local text_column = note_column
+        local line_width = vim.fn.strwidth(prefixed_text)
+
+        if is_left then
+            -- Left: align to the right (close to content)
+            local padding_needed = margin_width - line_width
+            if padding_needed > 0 then
+                local pad = string.rep(" ", padding_needed)
+                virt_text = {{pad .. prefixed_text, "InkNoteText"}}
+            else
+                virt_text = {{prefixed_text, "InkNoteText"}}
+            end
+        else
+            -- Right: left-aligned (natural for reading)
+            virt_text = {{prefixed_text, "InkNoteText"}}
+        end
+
+        vim.api.nvim_buf_set_extmark(buf, ns_id, line_idx, 0, {
+            virt_text = virt_text,
+            virt_text_win_col = text_column,
+            priority = 2900
+        })
+    end
+end
+
+-- Main function: Apply margin notes using window columns
+function M.apply_margin_notes(buf, highlights, padding, max_width, win_width, ns_id)
+    -- Require Neovim 0.10+
+    if vim.fn.has('nvim-0.10') == 0 then
+        return false  -- fallback to expanded
+    end
+
+    -- Check if there's enough margin space
+    if padding < context.config.margin_min_space then
+        return false  -- fallback to expanded
+    end
+
+    local margin_width = context.config.margin_note_width or 35
+    local notes_with_positions = {}
+
+    -- Phase 1: Collect notes and calculate positions
+    for _, hl in ipairs(highlights) do
+        if hl.note and hl.note ~= "" and hl._start_line then
+            local highlight_col = hl._start_col or 0
+            local line_center = max_width / 2
+            local is_left = highlight_col < line_center
+
+            -- Calculate note column
+            local note_column
+            if is_left then
+                -- Left margin: padding - margin_width - 4 (more spacing from text)
+                note_column = math.max(0, padding - margin_width - 4)
+            else
+                -- Right margin: padding + max_width + 4 (more spacing from text)
+                note_column = padding + max_width + 4
+            end
+
+            -- Word wrap the note (reserve 4 chars for "(N) " prefix on first line)
+            local text_width = margin_width - 4
+            local wrapped_lines = util.wrap_note_text(hl.note, text_width)
+
+            -- Limit to 10 lines max
+            local MAX_NOTE_LINES = 10
+            if #wrapped_lines > MAX_NOTE_LINES then
+                wrapped_lines = vim.list_slice(wrapped_lines, 1, MAX_NOTE_LINES)
+                -- Add "..." on a separate line to avoid text overlap
+                table.insert(wrapped_lines, "...")
+            end
+
+            table.insert(notes_with_positions, {
+                hl = hl,
+                is_left = is_left,
+                note_column = note_column,
+                wrapped_lines = wrapped_lines,
+                start_line = hl._start_line,
+                lines_count = #wrapped_lines
+            })
+        end
+    end
+
+    -- Phase 2: Sort by line order and assign sequential numbers
+    table.sort(notes_with_positions, function(a, b)
+        if a.start_line == b.start_line then
+            -- Same line: left side first, then by column
+            if a.is_left ~= b.is_left then
+                return a.is_left
+            end
+            return (a.hl._start_col or 0) < (b.hl._start_col or 0)
+        end
+        return a.start_line < b.start_line
+    end)
+
+    -- Assign sequential note numbers
+    for i, note_info in ipairs(notes_with_positions) do
+        note_info.note_number = i
+    end
+
+    -- Phase 3: Conflict Detection & Adjustment
+    notes_with_positions = resolve_note_conflicts(notes_with_positions)
+
+    -- Phase 4: Apply extmarks
+    for _, note_info in ipairs(notes_with_positions) do
+        apply_single_margin_note(buf, note_info, margin_width, ns_id)
+    end
+
+    return true
+end
+
 return M

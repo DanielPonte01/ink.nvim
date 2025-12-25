@@ -344,8 +344,26 @@ function M.render_chapter(idx, restore_line, ctx)
   local extmarks_module = get_extmarks()
   extmarks_module.apply_user_highlights(ctx.content_buf, chapter_highlights, context.ns_id, final_lines)
 
-  -- Apply note indicators using extmarks module
-  extmarks_module.apply_note_indicators(ctx.content_buf, chapter_highlights, ctx.note_display_mode, padding, max_width, context.ns_id)
+  -- Apply note indicators or margin notes based on mode
+  if ctx.note_display_mode == "margin" then
+    local success = extmarks_module.apply_margin_notes(
+      ctx.content_buf,
+      chapter_highlights,
+      padding,
+      max_width,
+      win_width,
+      context.ns_id
+    )
+
+    -- Silent fallback to expanded mode if margin notes fail
+    if not success then
+      extmarks_module.apply_note_indicators(ctx.content_buf, chapter_highlights, "expanded", padding, max_width, context.ns_id)
+    end
+  elseif ctx.note_display_mode ~= "off" then
+    -- Use traditional note indicators for "indicator" and "expanded" modes
+    extmarks_module.apply_note_indicators(ctx.content_buf, chapter_highlights, ctx.note_display_mode, padding, max_width, context.ns_id)
+  end
+  -- If "off", don't apply any note indicators
 
   -- Render bookmarks using extmarks module
   local chapter_bookmarks = get_bookmarks_data().get_chapter_bookmarks(ctx.data.slug, idx)
@@ -372,6 +390,8 @@ function M.toggle_note_display(ctx)
   if ctx.note_display_mode == "off" then
     ctx.note_display_mode = "indicator"
   elseif ctx.note_display_mode == "indicator" then
+    ctx.note_display_mode = "margin"
+  elseif ctx.note_display_mode == "margin" then
     ctx.note_display_mode = "expanded"
   else
     ctx.note_display_mode = "off"

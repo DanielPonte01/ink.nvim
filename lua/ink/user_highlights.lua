@@ -117,4 +117,28 @@ function M.update_note(slug, highlight, note_text)
   return data.highlights
 end
 
+-- Update color on a highlight (match by text)
+function M.update_color(slug, highlight, new_color)
+  local data = M.load(slug)
+
+  for _, hl in ipairs(data.highlights) do
+    -- Match by chapter and text content
+    if hl.chapter == highlight.chapter and
+       hl.text == highlight.text and
+       hl.context_before == highlight.context_before and
+       hl.context_after == highlight.context_after then
+      -- Update color
+      hl.color = new_color
+      hl.updated_at = os.time()
+      if not hl.created_at then
+        hl.created_at = os.time()
+      end
+      break
+    end
+  end
+
+  M.save(slug, data.highlights)
+  return data.highlights
+end
+
 return M

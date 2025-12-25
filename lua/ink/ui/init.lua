@@ -40,10 +40,12 @@ M.toggle_note_display = render.toggle_note_display
 
 -- Re-export Notes/Highlights
 M.add_note = notes.add_note
+M.add_note_on_selection = notes.add_note_on_selection
 M.edit_note = notes.edit_note
 M.remove_note = notes.remove_note
 M.add_highlight = notes.add_highlight
 M.remove_highlight = notes.remove_highlight
+M.change_highlight_color = notes.change_highlight_color
 
 -- Re-export Search
 M.search_toc = search.search_toc

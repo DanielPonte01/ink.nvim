@@ -236,4 +236,88 @@ function M.get_link_at_cursor(line, col, ctx)
   return nil
 end
 
+-- Word wrap and justify text for margin notes
+function M.wrap_note_text(note, max_width)
+  if not note or note == "" then
+    return {}
+  end
+
+  local lines = {}
+  local current_words = {}
+
+  -- Phase 1: Wrap into lines
+  for word in note:gmatch("%S+") do
+    local test_line = table.concat(current_words, " ")
+    if #current_words > 0 then
+      test_line = test_line .. " " .. word
+    else
+      test_line = word
+    end
+
+    if vim.fn.strwidth(test_line) > max_width then
+      if #current_words > 0 then
+        table.insert(lines, current_words)
+        current_words = {word}
+      else
+        -- Word alone is larger than max_width, force break
+        table.insert(lines, {word:sub(1, max_width)})
+        current_words = {}
+      end
+    else
+      table.insert(current_words, word)
+    end
+  end
+
+  if #current_words > 0 then
+    table.insert(lines, current_words)
+  end
+
+  -- Phase 2: Determine if note should be justified
+  -- Calculate total character count
+  local total_chars = #note
+  local is_short_note = total_chars < (max_width * 1.5)  -- Less than 1.5 lines worth
+
+  -- Phase 3: Format lines
+  local formatted_lines = {}
+  for i, words in ipairs(lines) do
+    local is_last_line = (i == #lines)
+
+    if is_short_note or is_last_line or #words == 1 then
+      -- Short notes or last line: no justification, just join words
+      table.insert(formatted_lines, table.concat(words, " "))
+    else
+      -- Justify: distribute extra spaces between words
+      local text = table.concat(words, " ")
+      local text_width = vim.fn.strwidth(text)
+      local extra_spaces = max_width - text_width
+
+      -- Only justify if line is at least 85% full
+      if text_width >= (max_width * 0.85) and extra_spaces > 0 then
+        local gaps = #words - 1  -- number of gaps between words
+        local spaces_per_gap = math.floor(extra_spaces / gaps)
+        local extra_spaces_remainder = extra_spaces % gaps
+
+        local justified = ""
+        for j, word in ipairs(words) do
+          justified = justified .. word
+          if j < #words then
+            -- Add base space + extra spaces
+            local spaces = 1 + spaces_per_gap
+            if j <= extra_spaces_remainder then
+              spaces = spaces + 1
+            end
+            justified = justified .. string.rep(" ", spaces)
+          end
+        end
+        table.insert(formatted_lines, justified)
+      else
+        -- Not enough content to justify nicely
+        table.insert(formatted_lines, text)
+      end
+    end
+  end
+
+  return formatted_lines
+end
+
 return M

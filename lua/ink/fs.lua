@@ -41,13 +41,35 @@ function M.ensure_dir(path)
   vim.fn.mkdir(path, "p")
 end
 
--- Write content to file
+-- Write content to file with error handling
 function M.write_file(path, content)
-  local file = io.open(path, "w")
-  if not file then return false end
-  file:write(content or "")
-  file:close()
-  return true
+  local file, err = io.open(path, "w")
+  if not file then
+    vim.notify("Failed to open file for writing: " .. (err or "unknown error"), vim.log.levels.ERROR)
+    return false, err
+  end
+
+  -- Wrap write in pcall to catch disk full, permission errors, etc.
+  local ok, write_err = pcall(function()
+    file:write(content or "")
+  end)
+
+  if not ok then
+    file:close()
+    vim.notify("Failed to write to file: " .. tostring(write_err), vim.log.levels.ERROR)
+    return false, write_err
+  end
+
+  -- Wrap close in pcall as well (can fail on some systems)
+  local close_ok, close_err = pcall(function()
+    file:close()
+  end)
+
+  if not close_ok then
+    vim.notify("Warning: Failed to close file: " .. tostring(close_err), vim.log.levels.WARN)
+  end
+
+  return true, nil
 end
 
 -- Get file modification time (returns timestamp or nil)

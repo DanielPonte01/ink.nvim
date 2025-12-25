@@ -21,7 +21,7 @@ local function new_context()
     anchors = {},
     justify_map = {},
     last_statusline_percent = 0,
-    note_display_mode = "indicator",
+    note_display_mode = M.config.note_display_mode or "indicator",
     rendered_lines = {},
     default_max_width = nil,
     parsed_chapters = lru_cache.new(15),  -- LRU cache with max 15 chapters

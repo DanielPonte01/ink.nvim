@@ -32,6 +32,7 @@ local default_config = {
     green = { bg = "#8BB894", fg = "#000000" },
     red = { bg = "#D97B73", fg = "#000000" },
     blue = { bg = "#7BA3D0", fg = "#000000" },
+    none = { bg = "NONE", fg = "NONE" },
   },
   highlight_keymaps = {
     yellow = "<leader>hy",
@@ -40,11 +41,20 @@ local default_config = {
     blue = "<leader>hb",
     remove = "<leader>hd"
   },
+  highlight_change_color_keymaps = {
+    yellow = "<leader>hcy",
+    green = "<leader>hcg",
+    red = "<leader>hcr",
+    blue = "<leader>hcb"
+  },
   note_keymaps = {
     add = "<leader>na",           -- Add/edit note on highlight under cursor
     remove = "<leader>nd",       -- Remove note from highlight under cursor
-    toggle_display = "<leader>nt" -- Toggle note display mode (off/indicator/expanded)
+    toggle_display = "<leader>nt" -- Toggle note display mode (off/indicator/margin/expanded)
   },
+  note_display_mode = "margin",  -- "off" | "indicator" | "margin" | "expanded"
+  margin_note_width = 35,          -- Maximum width of margin notes
+  margin_min_space = 30,           -- Minimum margin space required for margin mode
   bookmark_keymaps = {
     add = "<leader>ba",           -- Add/edit bookmark
     remove = "<leader>bd",        -- Remove bookmark
@@ -286,6 +296,14 @@ function M.setup(opts)
   end, {
     bang = true,
     desc = "Reset all reading statistics (use ! to skip confirmation)"
+  })
+
+  -- Create Health Check command
+  vim.api.nvim_create_user_command("InkHealth", function()
+    local health = require("ink.health")
+    health.check()
+  end, {
+    desc = "Run health check diagnostics for ink.nvim"
   })
 
   -- Create Cache management commands

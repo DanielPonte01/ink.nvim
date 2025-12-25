@@ -128,8 +128,11 @@ function M.make_unique_id(id)
 		return id
 	end
 
-	-- Add timestamp suffix
-	return id .. "-" .. os.time()
+	-- Add timestamp + random suffix to prevent collisions
+	-- Random component ensures uniqueness even for rapid consecutive operations
+	math.randomseed(os.time() + vim.loop.hrtime())
+	local random_suffix = math.random(1000, 9999)
+	return id .. "-" .. os.time() .. "-" .. random_suffix
 end
 
 return M
