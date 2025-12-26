@@ -177,6 +177,7 @@ function M.add_bookmark()
         book_title = ctx.data.title,
         book_author = ctx.data.author,
         chapter = ctx.current_chapter_idx,
+        paragraph_line = paragraph_line,
         paragraph_text = paragraph_text,
         context_before = context_before,
         context_after = context_after,
