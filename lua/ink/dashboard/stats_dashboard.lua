@@ -16,11 +16,36 @@ local cache = {
 	ttl = 60, -- 60 seconds
 }
 
+-- Helper to find buffer by name
+local function find_buf_by_name(name)
+	for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+		if vim.api.nvim_buf_is_valid(buf) then
+			local buf_name = vim.api.nvim_buf_get_name(buf)
+			if buf_name == name then
+				return buf
+			end
+		end
+	end
+	return nil
+end
+
 -- Show stats dashboard
-function M.show()
+-- @param opts table|nil - Options: { in_new_tab = true/false }
+function M.show(opts)
+	opts = opts or {}
+	local in_new_tab = opts.in_new_tab ~= false -- default true
+
+	local buf_name = "ink://dashboard/stats"
+
+	-- Delete existing buffer if it exists
+	local existing_buf = find_buf_by_name(buf_name)
+	if existing_buf then
+		vim.api.nvim_buf_delete(existing_buf, { force = true })
+	end
+
 	-- Create buffer
 	local buf = vim.api.nvim_create_buf(false, true)
-	vim.api.nvim_buf_set_name(buf, "ink://dashboard/stats")
+	vim.api.nvim_buf_set_name(buf, buf_name)
 
 	-- Buffer options
 	vim.api.nvim_buf_set_option(buf, "buftype", "nofile")
@@ -29,8 +54,14 @@ function M.show()
 	vim.api.nvim_buf_set_option(buf, "modifiable", false)
 	vim.api.nvim_buf_set_option(buf, "filetype", "ink-dashboard")
 
-	-- Show in current window
-	local win = vim.api.nvim_get_current_win()
+	-- Open in new tab or current window
+	local win
+	if in_new_tab then
+		vim.cmd("tabnew")
+		win = vim.api.nvim_get_current_win()
+	else
+		win = vim.api.nvim_get_current_win()
+	end
 	vim.api.nvim_win_set_buf(win, buf)
 
 	-- Store state
@@ -723,7 +754,8 @@ function M.setup_keymaps(buf)
 	-- Toggle back to library
 	vim.keymap.set("n", "s", function()
 		local library_dashboard = require("ink.dashboard.library_dashboard")
-		library_dashboard.show()
+		-- Don't open in new tab when toggling between dashboards
+		library_dashboard.show({ in_new_tab = false })
 	end, opts)
 
 	-- Refresh
