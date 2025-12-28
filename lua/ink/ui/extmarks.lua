@@ -336,18 +336,35 @@ local function apply_single_margin_note(buf, note_info, margin_width, ns_id)
 end
 
 -- Main function: Apply margin notes using window columns
-function M.apply_margin_notes(buf, highlights, padding, max_width, win_width, ns_id)
+function M.apply_margin_notes(buf, highlights, padding, max_width, win_width, ns_id, notify_on_fail)
     -- Require Neovim 0.10+
     if vim.fn.has('nvim-0.10') == 0 then
         return false  -- fallback to expanded
     end
 
-    -- Check if there's enough margin space
-    if padding < context.config.margin_min_space then
+    local margin_width = context.config.margin_note_width or 35
+
+    -- Calculate spacing proportional to available padding
+    -- More padding (smaller max_width) = more spacing between text and notes
+    -- Formula: 4 chars base + (padding / 40) adaptive spacing
+    -- Examples (1366px screen):
+    --   max_width=120, padding=623 → spacing = 4 + 15 = 19 chars
+    --   max_width=100, padding=633 → spacing = 4 + 15 = 19 chars
+    --   max_width=80,  padding=643 → spacing = 4 + 16 = 20 chars
+    -- Limits: min 4 chars (tight), max 20 chars (comfortable)
+    local spacing = math.max(4, math.min(20, 4 + math.floor(padding / 40)))
+
+    -- Check if there's enough margin space for notes + spacing
+    -- Need at least: margin_width + spacing
+    local min_space_required = margin_width + spacing
+    if padding < min_space_required then
+        -- Only notify if user explicitly toggled to margin mode
+        if notify_on_fail then
+            vim.notify("Not enough space. Fallback to expanded mode", vim.log.levels.INFO)
+        end
         return false  -- fallback to expanded
     end
 
-    local margin_width = context.config.margin_note_width or 35
     local notes_with_positions = {}
 
     -- Phase 1: Collect notes and calculate positions
@@ -357,14 +374,17 @@ function M.apply_margin_notes(buf, highlights, padding, max_width, win_width, ns
             local line_center = max_width / 2
             local is_left = highlight_col < line_center
 
-            -- Calculate note column
+            -- Calculate note column with proportional spacing
             local note_column
             if is_left then
-                -- Left margin: padding - margin_width - 4 (more spacing from text)
-                note_column = math.max(0, padding - margin_width - 4)
+                -- Left margin: padding - margin_width - spacing
+                -- Ensure note doesn't go off-screen (column >= 0)
+                note_column = math.max(0, padding - margin_width - spacing)
             else
-                -- Right margin: padding + max_width + 4 (more spacing from text)
-                note_column = padding + max_width + 4
+                -- Right margin: padding + max_width + spacing
+                -- Ensure note doesn't exceed window width
+                local max_right_col = win_width - margin_width
+                note_column = math.min(padding + max_width + spacing, max_right_col)
             end
 
             -- Word wrap the note (reserve 4 chars for "(N) " prefix on first line)

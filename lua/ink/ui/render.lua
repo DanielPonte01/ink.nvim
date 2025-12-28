@@ -352,13 +352,17 @@ function M.render_chapter(idx, restore_line, ctx)
       padding,
       max_width,
       win_width,
-      context.ns_id
+      context.ns_id,
+      ctx._margin_toggle_attempt  -- Flag to show notification only on user toggle
     )
 
     -- Silent fallback to expanded mode if margin notes fail
     if not success then
       extmarks_module.apply_note_indicators(ctx.content_buf, chapter_highlights, "expanded", padding, max_width, context.ns_id)
     end
+
+    -- Clear the flag after first attempt
+    ctx._margin_toggle_attempt = false
   elseif ctx.note_display_mode ~= "off" then
     -- Use traditional note indicators for "indicator" and "expanded" modes
     extmarks_module.apply_note_indicators(ctx.content_buf, chapter_highlights, ctx.note_display_mode, padding, max_width, context.ns_id)
@@ -391,6 +395,7 @@ function M.toggle_note_display(ctx)
     ctx.note_display_mode = "indicator"
   elseif ctx.note_display_mode == "indicator" then
     ctx.note_display_mode = "margin"
+    ctx._margin_toggle_attempt = true  -- Flag to show notification if margin fails
   elseif ctx.note_display_mode == "margin" then
     ctx.note_display_mode = "expanded"
   else
