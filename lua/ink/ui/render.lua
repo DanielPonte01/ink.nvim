@@ -446,11 +446,17 @@ function M.render_chapter(idx, restore_line, ctx)
 
   if ctx.content_win and vim.api.nvim_win_is_valid(ctx.content_win) then
     if restore_line then
+      -- Get total lines in buffer to validate cursor position
+      local total_lines = vim.api.nvim_buf_line_count(ctx.content_buf)
+
       -- restore_line can be either a number (line only) or a table {line, col}
       if type(restore_line) == "table" then
-        vim.api.nvim_win_set_cursor(ctx.content_win, restore_line)
+        local line = math.max(1, math.min(restore_line[1], total_lines))
+        local col = restore_line[2] or 0
+        vim.api.nvim_win_set_cursor(ctx.content_win, {line, col})
       else
-        vim.api.nvim_win_set_cursor(ctx.content_win, {restore_line, 0})
+        local line = math.max(1, math.min(restore_line, total_lines))
+        vim.api.nvim_win_set_cursor(ctx.content_win, {line, 0})
       end
     else
       vim.api.nvim_win_set_cursor(ctx.content_win, {1, 0})

@@ -5,19 +5,8 @@ local M = {}
 function M.generate_term_graph(entry, all_entries)
   local lines = {}
 
-  -- Get type icon and name
-  local context = require("ink.ui.context")
-  local types_config = vim.tbl_extend("force",
-    context.config.glossary_types or {},
-    {}
-  )
-  local type_info = types_config[entry.type] or { icon = "📝", color = "InkGlossary" }
-  local type_name = entry.type:gsub("_", " "):gsub("(%a)([%w_']*)", function(a, b)
-    return a:upper() .. b
-  end)
-
-  -- Title: term (type)
-  table.insert(lines, string.format("%s %s (%s)", type_info.icon, entry.term, type_name))
+  -- Title: term
+  table.insert(lines, string.format("📖 %s", entry.term))
 
   if not entry.relationships or next(entry.relationships) == nil then
     table.insert(lines, "")
@@ -91,15 +80,13 @@ function M.generate_term_graph(entry, all_entries)
       -- Format term line
       local term_line
       if related_entry then
-        local rel_type_info = types_config[related_entry.type] or { icon = "📝" }
-
         -- Build alias info if the term has aliases
         local alias_info = ""
         if related_entry.aliases and #related_entry.aliases > 0 then
           alias_info = " [" .. table.concat(related_entry.aliases, ", ") .. "]"
         end
 
-        term_line = string.format("%s%s%s %s%s", indent, term_prefix, rel_type_info.icon, resolved_name, alias_info)
+        term_line = string.format("%s%s📖 %s%s", indent, term_prefix, resolved_name, alias_info)
       else
         term_line = string.format("%s%s%s (not found)", indent, term_prefix, term_name)
       end

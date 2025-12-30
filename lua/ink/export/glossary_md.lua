@@ -35,13 +35,6 @@ function M.format(entries, book_title)
     table.insert(lines, "## " .. entry.term)
     table.insert(lines, "")
 
-    -- Type
-    local type_name = entry.type:gsub("_", " "):gsub("(%a)([%w_']*)", function(a, b)
-      return a:upper() .. b
-    end)
-    table.insert(lines, "**Type:** " .. type_name)
-    table.insert(lines, "")
-
     -- Aliases
     if entry.aliases and #entry.aliases > 0 then
       table.insert(lines, "**Aliases:** " .. table.concat(entry.aliases, ", "))

@@ -55,7 +55,7 @@ local function convert_to_graph_data(entries)
     table.insert(nodes, {
       id = entry.term,
       label = entry.term,
-      type = entry.type,
+      type = entry.type or "other",  -- Default to "other" if no type specified
       definition = entry.definition or "",
       aliases = entry.aliases or {},
       exists = true
@@ -612,6 +612,11 @@ function M.generate(entries, book_title)
     const allNodes = ]] .. nodes_json .. [[;
     const allLinks = ]] .. links_json .. [[;
 
+    console.log("Loaded nodes:", allNodes.length);
+    console.log("Loaded links:", allLinks.length);
+    console.log("Nodes:", allNodes);
+    console.log("Links:", allLinks);
+
     // Type icons and colors
     const typeConfig = {
       character: { icon: "👤", color: "#3498db" },
@@ -621,6 +626,7 @@ function M.generate(entries, book_title)
       object: { icon: "⚔️", color: "#1abc9c" },
       event: { icon: "⚡", color: "#f1c40f" },
       foreign_word: { icon: "🌐", color: "#27ae60" },
+      term: { icon: "📖", color: "#34495e" },
       other: { icon: "📝", color: "#95a5a6" },
       not_found: { icon: "❓", color: "#bdc3c7" }
     };

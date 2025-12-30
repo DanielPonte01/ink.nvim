@@ -410,18 +410,8 @@ function M.show_entry_preview(match)
   -- Format preview content
   local lines = {}
 
-  -- Get type icon and name
-  local types_config = vim.tbl_extend("force",
-    context.config.glossary_types or {},
-    ctx.glossary_custom_types or {}
-  )
-  local type_info = types_config[entry.type] or { icon = "📝", color = "InkGlossary" }
-  local type_name = entry.type:gsub("_", " "):gsub("(%a)([%w_']*)", function(a, b)
-    return a:upper() .. b
-  end)
-
-  -- Title line: icon + term (type)
-  table.insert(lines, string.format("%s %s (%s)", type_info.icon, entry.term, type_name))
+  -- Title line: icon + term
+  table.insert(lines, string.format("📖 %s", entry.term))
 
   -- Separator
   table.insert(lines, string.rep("─", 50))
