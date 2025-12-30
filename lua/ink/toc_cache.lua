@@ -4,8 +4,9 @@ local data = require("ink.data")
 local M = {}
 
 local function get_toc_cache_path(slug)
-  fs.ensure_dir(data.get_data_dir())
-  return data.get_data_dir() .. "/" .. slug .. "_toc.json"
+  local cache_dir = vim.fn.stdpath("data") .. "/ink.nvim/cache/" .. slug
+  fs.ensure_dir(cache_dir)
+  return cache_dir .. "/toc.json"
 end
 
 function M.save(slug, toc)

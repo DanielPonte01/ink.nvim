@@ -196,6 +196,36 @@ function M.setup_book_keymaps(content_buf, toc_buf)
   if bookmark_keymaps.prev then
     vim.api.nvim_buf_set_keymap(content_buf, "n", bookmark_keymaps.prev, ":lua require('ink.ui').goto_prev_bookmark()<CR>", keymap_opts)
   end
+
+  -- Glossary keymaps (content buffer only)
+  local glossary_keymaps = context.config.glossary_keymaps or {}
+  if glossary_keymaps.add then
+    -- Visual mode: add from manual selection
+    vim.api.nvim_buf_set_keymap(content_buf, "v", glossary_keymaps.add, ":lua require('ink.ui').add_glossary_from_selection()<CR>", keymap_opts)
+    -- Normal mode: add from word under cursor
+    vim.api.nvim_buf_set_keymap(content_buf, "n", glossary_keymaps.add, ":lua require('ink.ui').add_glossary_under_cursor()<CR>", keymap_opts)
+  end
+  if glossary_keymaps.edit then
+    vim.api.nvim_buf_set_keymap(content_buf, "n", glossary_keymaps.edit, ":lua require('ink.ui').edit_glossary_under_cursor()<CR>", keymap_opts)
+  end
+  if glossary_keymaps.remove then
+    vim.api.nvim_buf_set_keymap(content_buf, "n", glossary_keymaps.remove, ":lua require('ink.ui').remove_glossary_under_cursor()<CR>", keymap_opts)
+  end
+  if glossary_keymaps.preview then
+    vim.api.nvim_buf_set_keymap(content_buf, "n", glossary_keymaps.preview, ":lua require('ink.ui').preview_glossary()<CR>", keymap_opts)
+  end
+  if glossary_keymaps.browser then
+    vim.api.nvim_buf_set_keymap(content_buf, "n", glossary_keymaps.browser, ":lua require('ink.ui').show_glossary_browser()<CR>", keymap_opts)
+  end
+  if glossary_keymaps.show_related then
+    vim.api.nvim_buf_set_keymap(content_buf, "n", glossary_keymaps.show_related, ":lua require('ink.ui').show_term_graph_under_cursor()<CR>", keymap_opts)
+  end
+  if glossary_keymaps.show_graph then
+    vim.api.nvim_buf_set_keymap(content_buf, "n", glossary_keymaps.show_graph, ":lua require('ink.ui').show_glossary_graph()<CR>", keymap_opts)
+  end
+  if glossary_keymaps.toggle_display then
+    vim.api.nvim_buf_set_keymap(content_buf, "n", glossary_keymaps.toggle_display, ":lua require('ink.ui').toggle_glossary_display()<CR>", keymap_opts)
+  end
 end
 
 -- Setup autocmds for book

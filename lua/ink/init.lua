@@ -97,6 +97,27 @@ local default_config = {
         auto_save_interval = 300, -- Update interval (seconds) - 5 minutes
         cleanup_after_days = 365, -- Clean up sessions older than N days (0 = never)
         grace_period = 1,         -- Days of grace for streak (0 = no grace, 1 = 1 day)
+    },
+    glossary_types = {
+        character = { icon = "👤", color = "InkGlossaryCharacter" },
+        place = { icon = "📍", color = "InkGlossaryPlace" },
+        concept = { icon = "💡", color = "InkGlossaryConcept" },
+        organization = { icon = "🏛️", color = "InkGlossaryOrg" },
+        object = { icon = "⚔️", color = "InkGlossaryObject" },
+        event = { icon = "⚡", color = "InkGlossaryEvent" },
+        foreign_word = { icon = "🌐", color = "InkGlossaryForeign" },
+        other = { icon = "📝", color = "InkGlossary" }
+    },
+    glossary_visible = true,          -- Show glossary terms in text by default
+    glossary_keymaps = {
+        add = "<leader>ga",           -- Add glossary entry
+        edit = "<leader>ge",          -- Edit entry under cursor
+        remove = "<leader>gd",        -- Remove entry
+        preview = "<leader>gp",       -- Preview entry (explicit)
+        browser = "<leader>gl",       -- Browse/search all glossary entries
+        show_related = "<leader>gg",  -- Show related entries (term graph)
+        show_graph = "<leader>gG",    -- Show full glossary graph
+        toggle_display = "<leader>gt", -- Toggle glossary term display
     }
 }
 
@@ -107,6 +128,12 @@ function M.setup(opts)
     -- Setup reading sessions tracking
     local reading_sessions = require("ink.reading_sessions")
     reading_sessions.setup(M.config.tracking)
+
+    -- Run directory migration (async, non-blocking)
+    vim.schedule(function()
+        local migration = require("ink.data.directory_migration")
+        migration.migrate()
+    end)
 
     -- Function to define highlights
     local function define_highlights()
@@ -132,6 +159,16 @@ function M.setup(opts)
       highlight default link InkNoteIndicator DiagnosticInfo
       highlight default link InkNoteText Comment
       highlight default link InkBookmark DiagnosticHint
+      highlight default link InkGlossaryUnderline Underlined
+      highlight default link InkGlossary DiagnosticInfo
+      highlight default link InkGlossaryCharacter DiagnosticInfo
+      highlight default link InkGlossaryPlace DiagnosticWarn
+      highlight default link InkGlossaryConcept DiagnosticHint
+      highlight default link InkGlossaryOrg Function
+      highlight default link InkGlossaryObject Constant
+      highlight default link InkGlossaryEvent Special
+      highlight default link InkGlossaryForeign String
+      highlight default link InkGlossaryAlias Comment
     ]])
 
         -- Define user highlight colors
@@ -268,6 +305,62 @@ function M.setup(opts)
     vim.api.nvim_create_user_command("InkNotesBook", function()
         local notes = require("ink.notes")
         notes.show_book_notes()
+    end, {})
+
+    -- Create Glossary commands
+    vim.api.nvim_create_user_command("InkGlossary", function()
+        local glossary_ui = require("ink.glossary.ui")
+        local context = require("ink.ui.context")
+        local ctx = context.current()
+        if ctx and ctx.data then
+            glossary_ui.show_glossary_browser(ctx.data.slug)
+        else
+            vim.notify("No book is currently open", vim.log.levels.WARN)
+        end
+    end, {})
+
+    vim.api.nvim_create_user_command("InkGlossaryFloating", function()
+        local glossary_ui = require("ink.glossary.ui")
+        local context = require("ink.ui.context")
+        local ctx = context.current()
+        if ctx and ctx.data then
+            glossary_ui.show_glossary_browser(ctx.data.slug, true)  -- Force floating
+        else
+            vim.notify("No book is currently open", vim.log.levels.WARN)
+        end
+    end, {})
+
+    vim.api.nvim_create_user_command("InkGlossaryAdd", function(args)
+        local glossary_ui = require("ink.glossary.ui")
+        local context = require("ink.ui.context")
+        local ctx = context.current()
+        if ctx and ctx.data then
+            local term = args.args ~= "" and args.args or nil
+            glossary_ui.show_add_entry_modal(ctx.data.slug, term, function(entry)
+                if entry then
+                    vim.notify("Glossary entry '" .. entry.term .. "' added", vim.log.levels.INFO)
+                    -- Re-render to show new glossary marks
+                    local render = require("ink.ui.render")
+                    render.invalidate_glossary_cache(ctx)
+                    local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
+                    render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
+                end
+            end)
+        else
+            vim.notify("No book is currently open", vim.log.levels.WARN)
+        end
+    end, { nargs = "?" })
+
+    -- Glossary graph commands
+    vim.api.nvim_create_user_command("InkGlossaryGraph", function()
+        local glossary_ui = require("ink.glossary.ui")
+        local context = require("ink.ui.context")
+        local ctx = context.current()
+        if ctx and ctx.data then
+            glossary_ui.show_full_graph(ctx.data.slug)
+        else
+            vim.notify("No book is currently open", vim.log.levels.WARN)
+        end
     end, {})
 
     -- Create Export command

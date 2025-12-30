@@ -374,9 +374,84 @@ function M.render_chapter(idx, restore_line, ctx)
   local bookmark_icon = context.config.bookmark_icon or "󰃀"
   extmarks_module.apply_bookmarks(ctx.content_buf, chapter_bookmarks, padding, bookmark_icon, context.ns_id, final_lines, max_width)
 
+  -- GLOSSARY: Detect and render glossary terms
+  local glossary_data = require("ink.glossary.data").load(ctx.data.slug)
+
+  if glossary_data and glossary_data.entries and #glossary_data.entries > 0 then
+    local detection = require("ink.glossary.detection")
+
+    -- Calculate current version hash (Level 2 optimization)
+    local current_version = detection.calculate_version_hash(glossary_data.entries)
+
+    -- Load persistent cache if in-memory cache is empty (Level 3 optimization)
+    if not ctx.glossary_matches_cache.version then
+      local glossary_cache = require("ink.glossary.cache")
+      local persistent_cache = glossary_cache.load(ctx.data.slug)
+
+      if persistent_cache and persistent_cache.version == current_version then
+        -- Persistent cache is valid, use it
+        ctx.glossary_matches_cache = persistent_cache
+      end
+    end
+
+    -- Check if cache is still valid (version matches)
+    if ctx.glossary_matches_cache.version ~= current_version then
+      -- Version mismatch: glossary structure changed, invalidate cache
+      ctx.glossary_matches_cache = {
+        version = current_version,
+        chapters = {}
+      }
+      -- Clear persistent cache (Level 3 optimization)
+      local glossary_cache = require("ink.glossary.cache")
+      glossary_cache.clear(ctx.data.slug)
+
+      -- Also rebuild detection index
+      ctx.glossary_detection_index = detection.build_detection_index(glossary_data.entries)
+      ctx.glossary_custom_types = glossary_data.custom_types
+    elseif not ctx.glossary_detection_index then
+      -- Version matches but index not built yet (first load)
+      ctx.glossary_detection_index = detection.build_detection_index(glossary_data.entries)
+      ctx.glossary_custom_types = glossary_data.custom_types
+    end
+
+    -- Check chapter cache (Level 1 optimization)
+    local cached_matches = ctx.glossary_matches_cache.chapters[idx]
+
+    if cached_matches then
+      -- Cache hit: use cached matches
+      ctx.glossary_matches = cached_matches
+    else
+      -- Cache miss: detect and store
+      ctx.glossary_matches = detection.detect_in_chapter(final_lines, ctx.glossary_detection_index)
+      ctx.glossary_matches_cache.chapters[idx] = ctx.glossary_matches
+
+      -- Persist cache to disk (Level 3 optimization)
+      local glossary_cache = require("ink.glossary.cache")
+      glossary_cache.save(ctx.data.slug, ctx.glossary_matches_cache)
+    end
+
+    -- Only apply glossary marks if glossary_visible is true
+    if ctx.glossary_visible and #ctx.glossary_matches > 0 then
+      extmarks_module.apply_glossary_marks(
+        ctx.content_buf,
+        ctx.glossary_matches,
+        ctx.glossary_detection_index.entries,
+        ctx.glossary_custom_types,
+        context.ns_id
+      )
+    end
+  else
+    ctx.glossary_matches = {}
+  end
+
   if ctx.content_win and vim.api.nvim_win_is_valid(ctx.content_win) then
     if restore_line then
-      vim.api.nvim_win_set_cursor(ctx.content_win, {restore_line, 0})
+      -- restore_line can be either a number (line only) or a table {line, col}
+      if type(restore_line) == "table" then
+        vim.api.nvim_win_set_cursor(ctx.content_win, restore_line)
+      else
+        vim.api.nvim_win_set_cursor(ctx.content_win, {restore_line, 0})
+      end
     else
       vim.api.nvim_win_set_cursor(ctx.content_win, {1, 0})
     end
@@ -404,6 +479,45 @@ function M.toggle_note_display(ctx)
   local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
   M.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
   vim.notify("Note display: " .. ctx.note_display_mode, vim.log.levels.INFO)
+end
+
+function M.toggle_glossary_display(ctx)
+  ctx = ctx or context.current()
+  if not ctx then return end
+
+  -- Toggle the visibility state
+  ctx.glossary_visible = not ctx.glossary_visible
+
+  -- Get current cursor position
+  local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
+
+  -- Re-render the chapter to apply/remove glossary marks
+  M.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
+
+  -- Notify user
+  local status = ctx.glossary_visible and "visible" or "hidden"
+  vim.notify("Glossary terms: " .. status, vim.log.levels.INFO)
+end
+
+-- Invalidate glossary cache (for when glossary is modified)
+-- Note: With Level 2 versioning, this is rarely needed as the system
+-- automatically detects version changes. This is kept for manual invalidation.
+function M.invalidate_glossary_cache(ctx)
+  ctx = ctx or context.current()
+  if not ctx then return end
+
+  ctx.glossary_detection_index = nil
+  ctx.glossary_matches_cache = {
+    version = nil,
+    chapters = {}
+  }
+  ctx.glossary_matches = {}
+
+  -- Clear persistent cache (Level 3 optimization)
+  if ctx.data and ctx.data.slug then
+    local glossary_cache = require("ink.glossary.cache")
+    glossary_cache.clear(ctx.data.slug)
+  end
 end
 
 return M

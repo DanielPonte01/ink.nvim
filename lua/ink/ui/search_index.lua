@@ -8,8 +8,10 @@ local M = {}
 
 -- Get path to persistent search index cache
 local function get_index_cache_path(slug)
-	local data = require("ink.data")
-	return data.get_book_dir(slug) .. "/search_index.json"
+	local cache_dir = vim.fn.stdpath("data") .. "/ink.nvim/cache/" .. slug
+	local fs = require("ink.fs")
+	fs.ensure_dir(cache_dir)
+	return cache_dir .. "/search_index.json"
 end
 
 -- Load search index from disk cache
@@ -47,12 +49,7 @@ end
 -- Save search index to disk cache
 function M.save_index_to_cache(slug, entries, total_chapters)
 	local path = get_index_cache_path(slug)
-	local data = require("ink.data")
-
-	-- Ensure book directory exists
-	local book_dir = data.get_book_dir(slug)
-	local fs = require("ink.fs")
-	fs.ensure_dir(book_dir)
+	-- Cache directory is ensured in get_index_cache_path()
 
 	-- Create cache data
 	local cache_data = {

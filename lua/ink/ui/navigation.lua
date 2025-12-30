@@ -129,7 +129,15 @@ function M.handle_enter()
       end
     end
   elseif buf == ctx.content_buf then
-    -- Check for images first (higher priority than links)
+    -- Check for glossary terms first (highest priority)
+    local glossary_ui = require("ink.glossary.ui")
+    local glossary_match = glossary_ui.get_match_at_cursor(line, col)
+    if glossary_match then
+      glossary_ui.show_entry_preview(glossary_match)
+      return
+    end
+
+    -- Check for images (second priority)
     for _, img in ipairs(ctx.images) do
       if img.line == line and img.type == "figure" then
         util.open_image(img.src, ctx)

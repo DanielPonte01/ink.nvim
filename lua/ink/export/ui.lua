@@ -22,12 +22,13 @@ local function get_default_export_dir()
 end
 
 -- Parse export command: <fmt> <flags> <path>
--- Examples: "md -bc ~/Documents", "json", "md -b"
+-- Examples: "md -bc ~/Documents", "json", "md -b", "md -g"
 local function parse_export_command(input, slug)
   local format = "markdown"  -- default
   local options = {
     include_bookmarks = false,
-    include_context = false
+    include_context = false,
+    include_glossary = false
   }
   local output_path = nil
 
@@ -61,6 +62,9 @@ local function parse_export_command(input, slug)
       end
       if part:find("c") then
         options.include_context = true
+      end
+      if part:find("g") then
+        options.include_glossary = true
       end
     else
       -- It's a path
@@ -100,7 +104,7 @@ function M.show_export_dialog()
 
   -- Single prompt for everything
   vim.ui.input({
-    prompt = "Export [md|json] [-bc] [path]: ",
+    prompt = "Export [md|json] [-bcg] [path]: ",
     default = "md"
   }, function(input)
     if not input then
