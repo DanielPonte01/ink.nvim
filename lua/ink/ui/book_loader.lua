@@ -238,9 +238,17 @@ function M.setup_book_autocmds(content_buf, slug)
     callback = function()
       local current_ctx = context.get(content_buf)
       if current_ctx and current_ctx.content_win and vim.api.nvim_win_is_valid(current_ctx.content_win) then
+        -- Skip during book initialization to prevent premature rendering/caching
+        if current_ctx._is_initializing then
+          return
+        end
+
         local resized_wins = vim.v.event.windows or {}
         for _, win_id in ipairs(resized_wins) do
           if win_id == current_ctx.content_win then
+            -- Invalidate glossary cache since positions depend on window width
+            render.invalidate_glossary_cache(current_ctx)
+
             local cursor = vim.api.nvim_win_get_cursor(current_ctx.content_win)
             render.render_chapter(current_ctx.current_chapter_idx, cursor[1], current_ctx)
             break

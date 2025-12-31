@@ -459,7 +459,15 @@ function M.render_chapter(idx, restore_line, ctx)
     local detection = require("ink.glossary.detection")
 
     -- Calculate current version hash (Level 2 optimization)
-    local current_version = detection.calculate_version_hash(glossary_data.entries)
+    -- Include max_width and typography in hash since positions depend on rendering
+    local base_version = detection.calculate_version_hash(glossary_data.entries)
+    local current_version = string.format("%s_w%d_ls%d_ps%d_j%s",
+      base_version,
+      max_width,
+      typography.line_spacing or 1,
+      typography.paragraph_spacing or 1,
+      tostring(justify_text or false)
+    )
 
     -- Load persistent cache if in-memory cache is empty (Level 3 optimization)
     if not ctx.glossary_matches_cache.version then
