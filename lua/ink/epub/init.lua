@@ -242,18 +242,19 @@ function M.open(epub_path, opts)
     css_cache.save(slug, class_styles)
   end
 
-  -- 5. Build TOC from content headings (H1-H3) - ONLY if no official TOC exists
-  -- Official TOC (NCX/NAV) always takes priority
-  if #toc == 0 then
-    -- No official TOC found, try to build from content
-    local toc_cache = require("ink.toc_cache")
-    local cached_toc = toc_cache.load(slug)
+  -- 5. Build TOC from content headings (H1-H3)
+  -- Priority: cached TOC > force_content_toc > official TOC > build from content
+  local force_content_toc = opts.force_content_toc or false
+  local toc_cache = require("ink.toc_cache")
 
-    if cached_toc and #cached_toc > 0 then
-      -- Use cached TOC
-      toc = cached_toc
-    elseif not skip_toc_generation then
-      -- Build TOC and cache it
+  -- Always check cache first (user might have rebuilt TOC with :InkRebuildTOC)
+  local cached_toc = toc_cache.load(slug)
+  if cached_toc and #cached_toc > 0 then
+    -- Use cached TOC (preserves user's manual rebuild)
+    toc = cached_toc
+  elseif force_content_toc or #toc == 0 then
+    -- No cache: build from content if forced or no official TOC exists
+    if not skip_toc_generation then
       local content_toc = M.build_toc_from_content(spine, opf_dir, class_styles)
       if #content_toc > 0 then
         toc = content_toc
@@ -261,6 +262,7 @@ function M.open(epub_path, opts)
       end
     end
   end
+  -- Otherwise: use official TOC (already loaded from NCX/NAV)
 
   -- DEBUG: Calculate elapsed time
   -- local end_time = vim.loop.hrtime()

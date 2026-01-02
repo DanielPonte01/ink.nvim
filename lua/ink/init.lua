@@ -14,7 +14,7 @@ local default_config = {
         toggle_toc = "<leader>t",
         toggle_floating_toc = "<leader>T", -- Floating TOC (experimental)
         activate = "<CR>",
-        jump_to_link = "g<CR>", -- Jump to link target (footnotes, cross-references)
+        jump_to_link = "g<CR>",            -- Jump to link target (footnotes, cross-references)
         search_toc = "<leader>pit",
         search_content = "<leader>pif",
         search_mode_toggle = "<C-f>", -- Toggle between TOC and content search
@@ -109,17 +109,22 @@ local default_config = {
         foreign_word = { icon = "🌐", color = "InkGlossaryForeign" },
         other = { icon = "📝", color = "InkGlossary" }
     },
-    glossary_visible = true,          -- Show glossary terms in text by default
+    glossary_visible = true,           -- Show glossary terms in text by default
     glossary_keymaps = {
-        add = "<leader>ga",           -- Add glossary entry
-        edit = "<leader>ge",          -- Edit entry under cursor
-        remove = "<leader>gd",        -- Remove entry
-        preview = "<leader>gp",       -- Preview entry (explicit)
-        browser = "<leader>gl",       -- Browse/search all glossary entries
-        show_related = "<leader>gg",  -- Show related entries (term graph)
-        show_graph = "<leader>gG",    -- Show full glossary graph
+        add = "<leader>ga",            -- Add glossary entry
+        edit = "<leader>ge",           -- Edit entry under cursor
+        remove = "<leader>gd",         -- Remove entry
+        preview = "<leader>gp",        -- Preview entry (explicit)
+        browser = "<leader>gl",        -- Browse/search all glossary entries
+        show_related = "<leader>gg",   -- Show related entries (term graph)
+        show_graph = "<leader>gG",     -- Show full glossary graph
         toggle_display = "<leader>gt", -- Toggle glossary term display
-    }
+    },
+    -- TOC configuration
+    force_content_toc = false, -- Always build TOC from content headings (H1-H3) instead of using EPUB's official TOC
+    --toc_keymaps = {
+    --    rebuild = "<leader>tr", -- Rebuild TOC from content headings
+    --}
 }
 
 function M.setup(opts)
@@ -207,7 +212,7 @@ function M.setup(opts)
         -- Detect file format and open accordingly
         local ok, data
         if path:match("%.epub$") then
-            ok, data = pcall(epub.open, path)
+            ok, data = pcall(epub.open, path, { force_content_toc = M.config.force_content_toc })
             if not ok then
                 vim.notify("Failed to open EPUB: " .. data, vim.log.levels.ERROR)
                 return
@@ -314,6 +319,40 @@ function M.setup(opts)
         floating_toc.toggle_floating_toc()
     end, {})
 
+    -- Create Rebuild TOC command
+    vim.api.nvim_create_user_command("InkRebuildTOC", function()
+        local context = require("ink.ui.context")
+        local ctx = context.current()
+
+        if not ctx or not ctx.data then
+            vim.notify("No book is currently open", vim.log.levels.ERROR)
+            return
+        end
+
+        -- Clear TOC cache
+        local toc_cache = require("ink.toc_cache")
+        toc_cache.clear(ctx.data.slug)
+
+        -- Rebuild TOC from content
+        local content_toc = epub.build_toc_from_content(ctx.data.spine, ctx.data.base_dir, ctx.data.class_styles)
+
+        if #content_toc > 0 then
+            ctx.data.toc = content_toc
+            toc_cache.save(ctx.data.slug, content_toc)
+
+            -- Re-render TOC if it's open
+            if ctx.toc_win and vim.api.nvim_win_is_valid(ctx.toc_win) then
+                local toc = require("ink.ui.toc")
+                toc.render_toc(ctx)
+            end
+
+            vim.notify(string.format("TOC rebuilt with %d entries from content headings", #content_toc),
+                vim.log.levels.INFO)
+        else
+            vim.notify("No headings found in content to build TOC", vim.log.levels.WARN)
+        end
+    end, {})
+
     -- Create Glossary commands
     vim.api.nvim_create_user_command("InkGlossary", function()
         local glossary_ui = require("ink.glossary.ui")
@@ -331,7 +370,7 @@ function M.setup(opts)
         local context = require("ink.ui.context")
         local ctx = context.current()
         if ctx and ctx.data then
-            glossary_ui.show_glossary_browser(ctx.data.slug, true)  -- Force floating
+            glossary_ui.show_glossary_browser(ctx.data.slug, true) -- Force floating
         else
             vim.notify("No book is currently open", vim.log.levels.WARN)
         end
