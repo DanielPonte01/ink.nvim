@@ -25,7 +25,16 @@ local function new_context()
     rendered_lines = {},
     default_max_width = nil,
     parsed_chapters = lru_cache.new(15),  -- LRU cache with max 15 chapters
-    search_index = nil
+    search_index = nil,
+    -- Glossary fields
+    glossary_detection_index = nil,  -- Cache of detection index for performance
+    glossary_matches = {},           -- Detected glossary terms in current chapter
+    glossary_custom_types = {},      -- Custom types defined for this book
+    glossary_visible = M.config.glossary_visible or true,  -- Whether to show glossary terms
+    glossary_matches_cache = {       -- Versioned cache: { version = "hash", chapters = { [idx] = matches } }
+      version = nil,
+      chapters = {}
+    }
   }
 end
 

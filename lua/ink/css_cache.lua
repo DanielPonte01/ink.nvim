@@ -8,7 +8,9 @@ local M = {}
 
 -- Get cache file path for CSS styles
 local function get_cache_path(slug)
-  return data.get_book_dir(slug) .. "/css_cache.json"
+  local cache_dir = vim.fn.stdpath("data") .. "/ink.nvim/cache/" .. slug
+  fs.ensure_dir(cache_dir)
+  return cache_dir .. "/css.json"
 end
 
 -- Load cached CSS styles from disk
@@ -40,9 +42,7 @@ function M.save(slug, styles)
     return false
   end
 
-  local book_dir = data.get_book_dir(slug)
-  fs.ensure_dir(book_dir)
-
+  -- Cache directory is ensured in get_cache_path()
   local path = get_cache_path(slug)
   local json = data.json_encode(styles)
 

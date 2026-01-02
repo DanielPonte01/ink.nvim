@@ -1,4 +1,5 @@
 local M = {}
+local entities = require("ink.html.entities")
 
 local function get_attribute(tag_string, attr)
   local escaped_attr = attr:gsub("([%-%^%$%(%)%%%.%[%]%*%+%?])", "%%%1")
@@ -36,16 +37,22 @@ function M.parse_metadata(opf_content, slug)
   local language = get_tag_content(opf_content, "dc:language")
   local date = get_tag_content(opf_content, "dc:date")
   local description = get_tag_content(opf_content, "dc:description")
-  
+
+  -- Decode HTML entities in title and author
+  title = entities.decode_entities(title)
+  author = entities.decode_entities(author)
+
   if date then
     local year = date:match("^(%d%d%d%d)")
     if year then date = year end
   end
-  
+
   if description then
+    -- Decode entities FIRST, then remove HTML tags
+    description = entities.decode_entities(description)
     description = description:gsub("<[^>]+>", ""):gsub("%s+", " "):match("^%s*(.-)%s*$")
   end
-  
+
   return {
     title = title,
     author = author,

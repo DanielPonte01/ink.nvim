@@ -129,7 +129,15 @@ function M.handle_enter()
       end
     end
   elseif buf == ctx.content_buf then
-    -- Check for images first (higher priority than links)
+    -- Check for glossary terms first (highest priority)
+    local glossary_ui = require("ink.glossary.ui")
+    local glossary_match = glossary_ui.get_match_at_cursor(line, col)
+    if glossary_match then
+      glossary_ui.show_entry_preview(glossary_match)
+      return
+    end
+
+    -- Check for images (second priority)
     for _, img in ipairs(ctx.images) do
       if img.line == line and img.type == "figure" then
         util.open_image(img.src, ctx)
@@ -237,6 +245,7 @@ function M.increase_width()
   -- Invalidate cache and re-render
   ctx.parsed_chapters = {}
   ctx.search_index = nil
+  render.invalidate_glossary_cache(ctx)
   local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
   render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
 
@@ -254,6 +263,7 @@ function M.decrease_width()
   -- Invalidate cache and re-render
   ctx.parsed_chapters = {}
   ctx.search_index = nil
+  render.invalidate_glossary_cache(ctx)
   local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
   render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
 
@@ -269,6 +279,7 @@ function M.reset_width()
     -- Invalidate cache since parsing depends on max_width
     ctx.parsed_chapters = {}
     ctx.search_index = nil
+    render.invalidate_glossary_cache(ctx)
     local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
     render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
 
@@ -284,6 +295,7 @@ function M.toggle_justify()
   -- Invalidate cache since parsing depends on justify_text
   ctx.parsed_chapters = {}
   ctx.search_index = nil
+  render.invalidate_glossary_cache(ctx)
   local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
   render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
 
@@ -309,6 +321,7 @@ function M.increase_line_spacing()
   -- Invalidate cache since parsing depends on typography
   ctx.parsed_chapters = {}
   ctx.search_index = nil
+  render.invalidate_glossary_cache(ctx)
   local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
   render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
 
@@ -334,6 +347,7 @@ function M.decrease_line_spacing()
   -- Invalidate cache since parsing depends on typography
   ctx.parsed_chapters = {}
   ctx.search_index = nil
+  render.invalidate_glossary_cache(ctx)
   local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
   render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
 
@@ -359,6 +373,7 @@ function M.increase_paragraph_spacing()
   -- Invalidate cache since parsing depends on typography
   ctx.parsed_chapters = {}
   ctx.search_index = nil
+  render.invalidate_glossary_cache(ctx)
   local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
   render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
 
@@ -384,6 +399,7 @@ function M.decrease_paragraph_spacing()
   -- Invalidate cache since parsing depends on typography
   ctx.parsed_chapters = {}
   ctx.search_index = nil
+  render.invalidate_glossary_cache(ctx)
   local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
   render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
 
@@ -407,6 +423,7 @@ function M.reset_line_spacing()
   -- Invalidate cache since parsing depends on typography
   ctx.parsed_chapters = {}
   ctx.search_index = nil
+  render.invalidate_glossary_cache(ctx)
   local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
   render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
 
@@ -430,6 +447,7 @@ function M.reset_paragraph_spacing()
   -- Invalidate cache since parsing depends on typography
   ctx.parsed_chapters = {}
   ctx.search_index = nil
+  render.invalidate_glossary_cache(ctx)
   local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
   render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
 

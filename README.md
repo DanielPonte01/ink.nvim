@@ -2,9 +2,9 @@
 
 > A minimalist, distraction-free EPUB and Markdown reader for Neovim.
 
-Read books and documents without leaving your editor. Full support for EPUB files and Markdown documents with persistent highlights, notes, bookmarks, and powerful search capabilities.
+Read books and documents without leaving your editor. Full support for EPUB files and Markdown documents with persistent highlights, notes, bookmarks, glossary system, and powerful search capabilities.
 
-**Non-destructive**: All annotations (highlights, notes, bookmarks) are stored separately and never modify your original files.
+**Non-destructive**: All annotations (highlights, notes, bookmarks, glossary) are stored separately and never modify your original files.
 
 **Quick Start:**
 ```vim
@@ -26,6 +26,7 @@ Read books and documents without leaving your editor. Full support for EPUB file
 - **User highlights** with customizable colors (persistent across sessions)
 - **Notes on highlights** (add annotations to your highlights)
 - **Bookmarks** with navigation (multiple bookmarks per paragraph, jump between bookmarks across chapters)
+- **Glossary system** with auto-detection, relationships, and graph visualization
 - **Text justification** (optional, toggle on/off)
 - **Footnote preview** with floating windows
 - **Library management** (browse, search, track reading progress)
@@ -153,6 +154,18 @@ require("ink").setup({
     include_context = false,
     export_dir = "~/Documents",
   },
+
+  glossary_visible = true,
+  glossary_keymaps = {
+    add = "<leader>ga",
+    edit = "<leader>ge",
+    remove = "<leader>gd",
+    preview = "<leader>gp",
+    browser = "<leader>gl",
+    show_related = "<leader>gg",
+    show_graph = "<leader>gG",
+    toggle_display = "<leader>gt",
+  },
 })
 
 -- Optional: Add a keymap to quickly open EPUB files
@@ -223,6 +236,16 @@ vim.keymap.set("n", "<leader>le", ":InkEditLibrary", { desc = "Edit you library 
 - `<leader>bp` - Go to previous bookmark (across chapters)
 - `<leader>bl` - List all bookmarks (global keymap)
 - `<leader>bb` - List bookmarks in current book (global keymap)
+
+**Glossary:**
+- `<leader>ga` - Add glossary term under cursor
+- `<leader>ge` - Edit glossary term under cursor
+- `<leader>gd` - Remove glossary term under cursor
+- `<leader>gp` - Preview term definition (floating window)
+- `<leader>gl` - Browse all glossary terms (Telescope)
+- `<leader>gg` - Show related terms
+- `<leader>gG` - Show relationship graph (ASCII or HTML)
+- `<leader>gt` - Toggle glossary term visibility
 
 **Export:**
 - `<leader>ex` - Export current book highlights and bookmarks
@@ -313,6 +336,45 @@ Notes allow you to annotate your highlights with additional text:
 3. Press `<leader>na` to add/edit a note
 4. Type your note and press `<Esc>` to save
 
+### Glossary
+
+Build a wiki-like glossary of terms for your book with automatic detection and visualization:
+
+**Features:**
+- Define terms with aliases for flexible matching
+- Auto-detect terms in text (underline + icon indicator)
+- Preview definitions in floating window
+- Define relationships between terms (see-also, contrast, broader/narrower)
+- Bidirectional relationship sync
+- ASCII graph visualization in Neovim
+- Interactive HTML graph with D3.js (exported to browser)
+- Toggle visibility to focus on reading
+- 3-level caching for performance (memory, versioned, persistent)
+- Export glossary with `-g` flag
+
+**Usage:**
+1. Place cursor on a word and press `<leader>ga` to add to glossary
+2. Enter term, definition, and optional aliases
+3. Terms are automatically detected and marked in text
+4. Press `<leader>gp` on a term to preview definition
+5. Use `<leader>gl` to browse all terms (Telescope)
+6. Define relationships with `<leader>gg`
+7. Visualize network with `<leader>gG`
+
+**Relationships:**
+- `see_also`: Related concepts
+- `contrast`: Opposing concepts
+- `broader`: Parent concept
+- `narrower`: Child concept
+- All relationships sync bidirectionally
+
+**Graph Visualization:**
+- ASCII graph: Shows in split window, navigable
+- HTML graph: Interactive D3.js force-directed graph, exported to `/tmp/glossary_graph.html`
+
+**Performance:**
+Glossary uses 3-level caching to detect terms efficiently across large books without impacting navigation speed.
+
 ### Markdown Support
 
 ink.nvim provides full support for Markdown files with all EPUB features:
@@ -320,7 +382,7 @@ ink.nvim provides full support for Markdown files with all EPUB features:
 **Features:**
 - Automatic chapter division by H1 headings (falls back to H2 if no H1)
 - Generated table of contents from headings
-- All reading features work: highlights, bookmarks, notes, search, export
+- All reading features work: highlights, bookmarks, notes, glossary, search, export
 - Internal links navigate across chapters
 - Images and external links supported
 - Progress tracking and library management
@@ -336,7 +398,7 @@ ink.nvim provides full support for Markdown files with all EPUB features:
 :InkOpen ~/notes/book.md
 ```
 
-All features (highlights, bookmarks, notes, export) work identically to EPUBs.
+All features (highlights, bookmarks, notes, glossary, export) work identically to EPUBs.
 
 ### Export
 
@@ -349,7 +411,7 @@ Export your highlights, notes, and bookmarks to share or archive:
 
 Prompts for:
 - Format: `md` (Markdown) or `json`
-- Options: `-b` (include bookmarks), `-c` (include context)
+- Options: `-b` (include bookmarks), `-c` (include context), `-g` (include glossary)
 - Output path (defaults to `~/Documents`)
 
 **Export Format Examples:**
@@ -363,6 +425,7 @@ Result: `~/exports/book-title-2024-01-15.md`
 - Highlights grouped by chapter with color indication
 - Optional: Context lines around each highlight
 - Optional: Bookmarks with text previews
+- Optional: Glossary terms with definitions and relationships
 - Notes displayed inline with highlights
 
 **JSON Export:**
@@ -389,8 +452,10 @@ Shows list of cached books with Telescope or floating menu. Select a book to cle
 
 **Cache Features:**
 - Automatic invalidation when EPUB is modified
-- Extraction flag prevents incomplete cache usage
+- Organized structure: EPUB files in `epub/` subdirectory, cache files in root
+- Clear separation: `cache/` = deletable, `books/` = user data
 - Per-book storage in `~/.local/share/nvim/ink.nvim/cache/{slug}/`
+- Automatic migration from old structure on first run
 
 ### Data Storage
 
@@ -399,28 +464,50 @@ All plugin data is stored in `~/.local/share/nvim/ink.nvim/`:
 ```
 ~/.local/share/nvim/ink.nvim/
 ├── library.json              # Library metadata (all books)
-├── cache/                    # Extracted EPUB contents
+├── collections.json          # Book collections
+│
+├── cache/                    # ⚡ Temporary cache (safe to delete)
 │   └── {book-slug}/
-│       ├── .extracted        # Extraction flag (timestamp)
-│       └── ...               # Extracted files (HTML, images, CSS)
-└── books/                    # Per-book user data
+│       ├── epub/             # Extracted EPUB files
+│       │   ├── .extracted    # Extraction timestamp
+│       │   ├── META-INF/
+│       │   └── OEBPS/
+│       ├── toc.json          # Generated TOC from headings
+│       ├── css.json          # Parsed CSS styles
+│       ├── search_index.json # Full-text search index
+│       └── glossary_matches.json  # Detected glossary terms
+│
+└── books/                    # 💾 User data (never delete)
     └── {book-slug}/
         ├── state.json        # Reading position (chapter, line)
         ├── highlights.json   # User highlights and notes
         ├── bookmarks.json    # Bookmarks for this book
-        └── toc_cache.json    # Cached TOC (for EPUBs without built-in TOC)
+        ├── glossary.json     # Glossary terms and relationships
+        └── sessions.json     # Reading session history
 ```
 
 **File Descriptions:**
-- **library.json**: Tracks all opened books (EPUB/Markdown) with metadata, format, and progress
-- **cache/{slug}/**: Extracted EPUB files (HTML, images, CSS) with automatic invalidation
-- **cache/{slug}/.extracted**: Timestamp flag to track cache freshness
+
+*Root Level:*
+- **library.json**: Tracks all opened books (EPUB/Markdown) with metadata and progress
+- **collections.json**: Book collections/groups defined by user
+
+*Cache Directory (Temporary):*
+- **cache/{slug}/epub/**: Extracted EPUB contents (HTML, images, CSS, META-INF)
+- **cache/{slug}/epub/.extracted**: Extraction timestamp for cache validation
+- **cache/{slug}/toc.json**: Generated table of contents from headings
+- **cache/{slug}/css.json**: Parsed CSS class styles
+- **cache/{slug}/search_index.json**: Full-text search index
+- **cache/{slug}/glossary_matches.json**: Detected glossary term locations (3-level cache)
+
+*Books Directory (User Data):*
 - **books/{slug}/state.json**: Reading position (chapter index and line number)
 - **books/{slug}/highlights.json**: User highlights with colors, notes, and context
 - **books/{slug}/bookmarks.json**: Bookmarks with names and text previews
-- **books/{slug}/toc_cache.json**: Generated TOC cache for performance
+- **books/{slug}/glossary.json**: Glossary terms, definitions, aliases, and relationships
+- **books/{slug}/sessions.json**: Reading session history and statistics
 
-**Note:** Markdown files don't use cache (no extraction needed). All user data (highlights, bookmarks, notes) is stored the same way for both EPUBs and Markdown files.
+**Note:** Markdown files don't use cache (no extraction needed). All user data (highlights, bookmarks, notes, glossary) is stored the same way for both EPUBs and Markdown files.
 
 ### Search Features
 

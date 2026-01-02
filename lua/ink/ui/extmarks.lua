@@ -438,4 +438,64 @@ function M.apply_margin_notes(buf, highlights, padding, max_width, win_width, ns
     return true
 end
 
+function M.apply_glossary_marks(buf, matches, entries_map, custom_types, ns_id)
+    if not matches or #matches == 0 then return end
+
+    local context_config = require("ink.ui.context").config
+    local types_config = vim.tbl_extend("force",
+        context_config.glossary_types or {},
+        custom_types or {}
+    )
+
+    -- Get all lines for bounds checking
+    local line_count = vim.api.nvim_buf_line_count(buf)
+    local all_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+
+    for _, match in ipairs(matches) do
+        local entry = entries_map[match.entry_id]
+        if entry then
+            local type_info = types_config[entry.type] or
+                { icon = "📝", color = "InkGlossary" }
+
+            -- Use different icon for aliases
+            local icon = type_info.icon
+            local color = type_info.color
+            if match.is_alias then
+                icon = "→"  -- Arrow icon for aliases
+                color = "InkGlossaryAlias"
+            end
+
+            -- Convert from 1-based to 0-based (match.line is already correct for the buffer)
+            -- DO NOT add padding here - padding is virtual and doesn't affect buffer positions
+            local line_idx = match.line - 1
+
+            -- Bounds checking
+            if line_idx >= 0 and line_idx < line_count then
+                local line_length = #all_lines[line_idx + 1]
+                local start_col = math.min(match.start_col, line_length)
+                local end_col = math.min(match.end_col, line_length)
+
+                if start_col < end_col then
+                    -- Apply underline to the term
+                    vim.api.nvim_buf_set_extmark(buf, ns_id, line_idx, start_col, {
+                        end_col = end_col,
+                        hl_group = "InkGlossaryUnderline",
+                        priority = 1500,  -- Between syntax (1000) and user highlights (2000)
+                        hl_mode = "combine"
+                    })
+
+                    -- Apply icon inline after the term (only if end_col is valid)
+                    if end_col <= line_length then
+                        vim.api.nvim_buf_set_extmark(buf, ns_id, line_idx, end_col, {
+                            virt_text = { { icon, color } },
+                            virt_text_pos = "inline",
+                            priority = 1500
+                        })
+                    end
+                end
+            end
+        end
+    end
+end
+
 return M

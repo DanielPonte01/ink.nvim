@@ -5,108 +5,140 @@ local ui = require("ink.ui")
 local M = {}
 
 local default_config = {
-  focused_mode = true,
-  image_open = true,
-  justify_text = false,  -- Enable text justification (adds spaces between words, affects copying)
-  keymaps = {
-    next_chapter = "]c",
-    prev_chapter = "[c",
-    toggle_toc = "<leader>t",
-    activate = "<CR>",
-    jump_to_link = "g<CR>",  -- Jump to link target (footnotes, cross-references)
-    search_toc = "<leader>pit",
-    search_content = "<leader>pif",
-    search_mode_toggle = "<C-f>",  -- Toggle between TOC and content search
-    width_increase = "<leader>+",
-    width_decrease = "<leader>-",
-    width_reset = "<leader>=",
-    toggle_justify = "<leader>jt",  -- Toggle text justification
-    library = "<leader>eL",  -- Open library
-    last_book = "<leader>el",  -- Open last book
-    dashboard = "<leader>ed"  -- Open dashboard
-  },
-  max_width = 120,
-  width_step = 10,  -- How much to change width per keypress
-  highlight_colors = {
-    yellow = { bg = "#E8C89F", fg = "#000000" },
-    green = { bg = "#8BB894", fg = "#000000" },
-    red = { bg = "#D97B73", fg = "#000000" },
-    blue = { bg = "#7BA3D0", fg = "#000000" },
-    none = { bg = "NONE", fg = "NONE" },
-  },
-  highlight_keymaps = {
-    yellow = "<leader>hy",
-    green = "<leader>hg",
-    red = "<leader>hr",
-    blue = "<leader>hb",
-    remove = "<leader>hd"
-  },
-  highlight_change_color_keymaps = {
-    yellow = "<leader>hcy",
-    green = "<leader>hcg",
-    red = "<leader>hcr",
-    blue = "<leader>hcb"
-  },
-  note_keymaps = {
-    add = "<leader>na",           -- Add/edit note on highlight under cursor
-    remove = "<leader>nd",       -- Remove note from highlight under cursor
-    toggle_display = "<leader>nt" -- Toggle note display mode (off/indicator/margin/expanded)
-  },
-  note_display_mode = "margin",  -- "off" | "indicator" | "margin" | "expanded"
-  margin_note_width = 35,          -- Maximum width of margin notes
-  margin_min_space = 30,           -- Minimum margin space required for margin mode
-  bookmark_keymaps = {
-    add = "<leader>ba",           -- Add bookmark
-    edit = "<leader>be",          -- Edit bookmark
-    remove = "<leader>bd",        -- Remove bookmark
-    next = "<leader>bn",          -- Go to next bookmark
-    prev = "<leader>bp",          -- Go to previous bookmark
-    list_all = "<leader>bl",      -- List all bookmarks
-    list_book = "<leader>bb",     -- List bookmarks in current book
-  },
-  bookmark_icon = "📑",            -- Default bookmark icon
-  export_keymaps = {
-    current_book = "<leader>ex",  -- Export current book
-  },
-  export_defaults = {
-    format = "markdown",           -- "markdown" | "json"
-    include_bookmarks = false,
-    include_context = false,
-    export_dir = "~/Documents",    -- Default export directory
-  },
-  typography = {
-    line_spacing = 1,              -- Lines between each line of text (1 = normal, 2 = double space)
-    paragraph_spacing = 1,         -- Lines between paragraphs
-    indent_size = 4,               -- Indent size for blockquotes, code blocks, definitions
-    list_indent = 2,               -- Indent size for nested lists
-  },
-  typography_keymaps = {
-    line_spacing_increase = "<leader>l+",
-    line_spacing_decrease = "<leader>l-",
-    line_spacing_reset = "<leader>l=",
-    paragraph_spacing_increase = "<leader>p+",
-    paragraph_spacing_decrease = "<leader>p-",
-    paragraph_spacing_reset = "<leader>p=",
-  },
-  tracking = {
-    enabled = true,               -- Enable/disable reading session tracking
-    auto_save_interval = 300,     -- Update interval (seconds) - 5 minutes
-    cleanup_after_days = 365,     -- Clean up sessions older than N days (0 = never)
-    grace_period = 1,             -- Days of grace for streak (0 = no grace, 1 = 1 day)
-  }
+    focused_mode = true,
+    image_open = true,
+    justify_text = false, -- Enable text justification (adds spaces between words, affects copying)
+    keymaps = {
+        next_chapter = "]c",
+        prev_chapter = "[c",
+        toggle_toc = "<leader>t",
+        toggle_floating_toc = "<leader>T", -- Floating TOC (experimental)
+        activate = "<CR>",
+        jump_to_link = "g<CR>", -- Jump to link target (footnotes, cross-references)
+        search_toc = "<leader>pit",
+        search_content = "<leader>pif",
+        search_mode_toggle = "<C-f>", -- Toggle between TOC and content search
+        width_increase = "<leader>+",
+        width_decrease = "<leader>-",
+        width_reset = "<leader>=",
+        toggle_justify = "<leader>jt", -- Toggle text justification
+        library = "<leader>eL",        -- Open library
+        last_book = "<leader>el",      -- Open last book
+        dashboard = "<leader>ed"       -- Open dashboard
+    },
+    max_width = 120,
+    width_step = 10, -- How much to change width per keypress
+    highlight_colors = {
+        yellow = { bg = "#E8C89F", fg = "#000000" },
+        green = { bg = "#8BB894", fg = "#000000" },
+        red = { bg = "#D97B73", fg = "#000000" },
+        blue = { bg = "#7BA3D0", fg = "#000000" },
+        none = { bg = "NONE", fg = "NONE" },
+    },
+    highlight_keymaps = {
+        yellow = "<leader>hy",
+        green = "<leader>hg",
+        red = "<leader>hr",
+        blue = "<leader>hb",
+        remove = "<leader>hd"
+    },
+    highlight_change_color_keymaps = {
+        yellow = "<leader>hcy",
+        green = "<leader>hcg",
+        red = "<leader>hcr",
+        blue = "<leader>hcb"
+    },
+    note_keymaps = {
+        add = "<leader>na",           -- Add/edit note on highlight under cursor
+        remove = "<leader>nd",        -- Remove note from highlight under cursor
+        toggle_display = "<leader>nt" -- Toggle note display mode (off/indicator/margin/expanded)
+    },
+    note_display_mode = "margin",     -- "off" | "indicator" | "margin" | "expanded"
+    margin_note_width = 35,           -- Maximum width of margin notes
+    margin_min_space = 30,            -- Minimum margin space required for margin mode
+    notes_list_keymaps = {
+        list_all = "<leader>nla",     -- List all notes from all books
+        list_book = "<leader>nlb",    -- List notes in current book
+    },
+    bookmark_keymaps = {
+        add = "<leader>ba", -- Add bookmark
+        edit = "<leader>be", -- Edit bookmark
+        remove = "<leader>bd", -- Remove bookmark
+        next = "<leader>bn", -- Go to next bookmark
+        prev = "<leader>bp", -- Go to previous bookmark
+        list_all = "<leader>bl", -- List all bookmarks
+        list_book = "<leader>bb", -- List bookmarks in current book
+    },
+    bookmark_icon = "📑", -- Default bookmark icon
+    export_keymaps = {
+        current_book = "<leader>ex", -- Export current book
+    },
+    export_defaults = {
+        format = "markdown", -- "markdown" | "json"
+        include_bookmarks = false,
+        include_context = false,
+        export_dir = "~/Documents", -- Default export directory
+    },
+    typography = {
+        line_spacing = 1,      -- Lines between each line of text (1 = normal, 2 = double space)
+        paragraph_spacing = 1, -- Lines between paragraphs
+        indent_size = 4,       -- Indent size for blockquotes, code blocks, definitions
+        list_indent = 2,       -- Indent size for nested lists
+    },
+    typography_keymaps = {
+        line_spacing_increase = "<leader>l+",
+        line_spacing_decrease = "<leader>l-",
+        line_spacing_reset = "<leader>l=",
+        paragraph_spacing_increase = "<leader>p+",
+        paragraph_spacing_decrease = "<leader>p-",
+        paragraph_spacing_reset = "<leader>p=",
+    },
+    tracking = {
+        enabled = true,           -- Enable/disable reading session tracking
+        auto_save_interval = 300, -- Update interval (seconds) - 5 minutes
+        cleanup_after_days = 365, -- Clean up sessions older than N days (0 = never)
+        grace_period = 1,         -- Days of grace for streak (0 = no grace, 1 = 1 day)
+    },
+    glossary_types = {
+        character = { icon = "👤", color = "InkGlossaryCharacter" },
+        place = { icon = "📍", color = "InkGlossaryPlace" },
+        concept = { icon = "💡", color = "InkGlossaryConcept" },
+        organization = { icon = "🏛️", color = "InkGlossaryOrg" },
+        object = { icon = "⚔️", color = "InkGlossaryObject" },
+        event = { icon = "⚡", color = "InkGlossaryEvent" },
+        foreign_word = { icon = "🌐", color = "InkGlossaryForeign" },
+        other = { icon = "📝", color = "InkGlossary" }
+    },
+    glossary_visible = true,          -- Show glossary terms in text by default
+    glossary_keymaps = {
+        add = "<leader>ga",           -- Add glossary entry
+        edit = "<leader>ge",          -- Edit entry under cursor
+        remove = "<leader>gd",        -- Remove entry
+        preview = "<leader>gp",       -- Preview entry (explicit)
+        browser = "<leader>gl",       -- Browse/search all glossary entries
+        show_related = "<leader>gg",  -- Show related entries (term graph)
+        show_graph = "<leader>gG",    -- Show full glossary graph
+        toggle_display = "<leader>gt", -- Toggle glossary term display
+    }
 }
 
 function M.setup(opts)
-  M.config = vim.tbl_deep_extend("force", default_config, opts or {})
-  ui.setup(M.config)
+    M.config = vim.tbl_deep_extend("force", default_config, opts or {})
+    ui.setup(M.config)
 
-  -- Setup reading sessions tracking
-  local reading_sessions = require("ink.reading_sessions")
-  reading_sessions.setup(M.config.tracking)
+    -- Setup reading sessions tracking
+    local reading_sessions = require("ink.reading_sessions")
+    reading_sessions.setup(M.config.tracking)
 
-  -- Function to define highlights
-  local function define_highlights()
-    vim.cmd([[
+    -- Run directory migration (async, non-blocking)
+    vim.schedule(function()
+        local migration = require("ink.data.directory_migration")
+        migration.migrate()
+    end)
+
+    -- Function to define highlights
+    local function define_highlights()
+        vim.cmd([[
       highlight default link InkTitle Title
       highlight default link InkH1 Title
       highlight default link InkH2 Constant
@@ -128,285 +160,376 @@ function M.setup(opts)
       highlight default link InkNoteIndicator DiagnosticInfo
       highlight default link InkNoteText Comment
       highlight default link InkBookmark DiagnosticHint
+      highlight default link InkGlossaryUnderline Underlined
+      highlight default link InkGlossary DiagnosticInfo
+      highlight default link InkGlossaryCharacter DiagnosticInfo
+      highlight default link InkGlossaryPlace DiagnosticWarn
+      highlight default link InkGlossaryConcept DiagnosticHint
+      highlight default link InkGlossaryOrg Function
+      highlight default link InkGlossaryObject Constant
+      highlight default link InkGlossaryEvent Special
+      highlight default link InkGlossaryForeign String
+      highlight default link InkGlossaryAlias Comment
     ]])
 
-    -- Define user highlight colors
-    for color_name, color_def in pairs(M.config.highlight_colors) do
-      local hl_group = "InkUserHighlight_" .. color_name
-      vim.api.nvim_set_hl(0, hl_group, {
-        bg = color_def.bg,
-        fg = color_def.fg
-      })
-    end
-  end
-
-  -- Define highlights initially
-  define_highlights()
-
-  -- Re-define highlights after colorscheme changes
-  vim.api.nvim_create_autocmd("ColorScheme", {
-    group = vim.api.nvim_create_augroup("InkHighlights", { clear = true }),
-    callback = function()
-      define_highlights()
-    end
-  })
-
-  -- Create Command
-  vim.api.nvim_create_user_command("InkOpen", function(args)
-    local path = args.args
-    if path == "" then
-      vim.notify("Please provide a file path (EPUB or Markdown)", vim.log.levels.ERROR)
-      return
-    end
-
-    -- Expand path
-    path = vim.fn.expand(path)
-
-    -- Detect file format and open accordingly
-    local ok, data
-    if path:match("%.epub$") then
-      ok, data = pcall(epub.open, path)
-      if not ok then
-        vim.notify("Failed to open EPUB: " .. data, vim.log.levels.ERROR)
-        return
-      end
-    elseif path:match("%.md$") or path:match("%.markdown$") then
-      ok, data = pcall(markdown.open, path)
-      if not ok then
-        vim.notify("Failed to open Markdown: " .. data, vim.log.levels.ERROR)
-        return
-      end
-    else
-      vim.notify("Unsupported file format. Please use .epub or .md files", vim.log.levels.ERROR)
-      return
-    end
-
-    ui.open_book(data)
-
-  end, {
-    nargs = 1,
-    complete = "file"
-  })
-
-  -- Create Library command
-  vim.api.nvim_create_user_command("InkLibrary", function()
-    ui.show_library()
-  end, {})
-
-  -- Create Last Book command
-  vim.api.nvim_create_user_command("InkLast", function()
-    ui.open_last_book()
-  end, {})
-
-  -- Create Edit Library command (opens library.json for manual editing)
-  vim.api.nvim_create_user_command("InkEditLibrary", function()
-    local library_path = vim.fn.stdpath("data") .. "/ink.nvim/library.json"
-    vim.cmd("edit " .. library_path)
-  end, {})
-
-  -- Create Add Library command (scans directory for EPUBs and adds them to library)
-  vim.api.nvim_create_user_command("InkAddLibrary", function(args)
-    local library = require("ink.library")
-    local directory = args.args
-    if directory == "" then
-      directory = vim.fn.getcwd()
-    end
-
-    vim.notify("Scanning for EPUB files in " .. directory .. "...", vim.log.levels.INFO)
-
-    -- Use async version with callback
-    library.scan_directory(directory, function(result, err)
-      if not result then
-        vim.notify("Error: " .. err, vim.log.levels.ERROR)
-        return
-      end
-
-      local message = string.format(
-        "Scan complete:\n- Total EPUBs found: %d\n- Added to library: %d\n- Already in library: %d",
-        result.total,
-        result.added,
-        result.skipped
-      )
-
-      if #result.errors > 0 then
-        message = message .. "\n- Failed to parse: " .. #result.errors
-        for i, error_info in ipairs(result.errors) do
-          if i <= 3 then
-            message = message .. "\n  * " .. vim.fn.fnamemodify(error_info.path, ":t")
-          end
+        -- Define user highlight colors
+        for color_name, color_def in pairs(M.config.highlight_colors) do
+            local hl_group = "InkUserHighlight_" .. color_name
+            vim.api.nvim_set_hl(0, hl_group, {
+                bg = color_def.bg,
+                fg = color_def.fg
+            })
         end
-        if #result.errors > 3 then
-          message = message .. "\n  ... and " .. (#result.errors - 3) .. " more"
+    end
+
+    -- Define highlights initially
+    define_highlights()
+
+    -- Re-define highlights after colorscheme changes
+    vim.api.nvim_create_autocmd("ColorScheme", {
+        group = vim.api.nvim_create_augroup("InkHighlights", { clear = true }),
+        callback = function()
+            define_highlights()
         end
-      end
+    })
 
-      vim.notify(message, vim.log.levels.INFO)
-    end)
-  end, {
-    nargs = "?",
-    complete = "dir"
-  })
+    -- Create Command
+    vim.api.nvim_create_user_command("InkOpen", function(args)
+        local path = args.args
+        if path == "" then
+            vim.notify("Please provide a file path (EPUB or Markdown)", vim.log.levels.ERROR)
+            return
+        end
 
-  -- Create Bookmarks commands
-  vim.api.nvim_create_user_command("InkBookmarks", function()
-    ui.show_all_bookmarks()
-  end, {})
+        -- Expand path
+        path = vim.fn.expand(path)
 
-  vim.api.nvim_create_user_command("InkBookmarksBook", function()
-    ui.show_book_bookmarks()
-  end, {})
+        -- Detect file format and open accordingly
+        local ok, data
+        if path:match("%.epub$") then
+            ok, data = pcall(epub.open, path)
+            if not ok then
+                vim.notify("Failed to open EPUB: " .. data, vim.log.levels.ERROR)
+                return
+            end
+        elseif path:match("%.md$") or path:match("%.markdown$") then
+            ok, data = pcall(markdown.open, path)
+            if not ok then
+                vim.notify("Failed to open Markdown: " .. data, vim.log.levels.ERROR)
+                return
+            end
+        else
+            vim.notify("Unsupported file format. Please use .epub or .md files", vim.log.levels.ERROR)
+            return
+        end
 
-  -- Create Export command
-  vim.api.nvim_create_user_command("InkExport", function()
-    local export_ui = require("ink.export.ui")
-    export_ui.show_export_dialog()
-  end, {})
+        ui.open_book(data)
+    end, {
+        nargs = 1,
+        complete = "file"
+    })
 
-  -- Create Dashboard command
-  vim.api.nvim_create_user_command("InkDashboard", function(args)
-    local dashboard = require("ink.dashboard")
-    local dashboard_type = args.args ~= "" and args.args or "library"
-    dashboard.show(dashboard_type)
-  end, {
-    nargs = "?",
-    complete = function()
-      return { "library", "stats" }
-    end,
-  })
+    -- Create Library command
+    vim.api.nvim_create_user_command("InkLibrary", function()
+        ui.show_library()
+    end, {})
 
-  -- Create Reset Statistics command
-  vim.api.nvim_create_user_command("InkResetStats", function(args)
-    local force = args.bang
+    -- Create Last Book command
+    vim.api.nvim_create_user_command("InkLast", function()
+        ui.open_last_book()
+    end, {})
 
-    if force then
-      -- Force reset without confirmation
-      local sessions = require("ink.reading_sessions")
-      sessions.reset_all_statistics()
-      vim.notify("All reading statistics have been reset", vim.log.levels.WARN)
-    else
-      -- Ask for confirmation
-      local confirm = vim.fn.input("Reset all reading statistics? This cannot be undone. (y/N): ")
-      if confirm:lower() == "y" or confirm:lower() == "yes" then
-        local sessions = require("ink.reading_sessions")
-        sessions.reset_all_statistics()
-        vim.notify("All reading statistics have been reset", vim.log.levels.WARN)
-      else
-        vim.notify("Reset cancelled", vim.log.levels.INFO)
-      end
+    -- Create Edit Library command (opens library.json for manual editing)
+    vim.api.nvim_create_user_command("InkEditLibrary", function()
+        local library_path = vim.fn.stdpath("data") .. "/ink.nvim/library.json"
+        vim.cmd("edit " .. library_path)
+    end, {})
+
+    -- Create Add Library command (scans directory for EPUBs and adds them to library)
+    vim.api.nvim_create_user_command("InkAddLibrary", function(args)
+        local library = require("ink.library")
+        local directory = args.args
+        if directory == "" then
+            directory = vim.fn.getcwd()
+        end
+
+        vim.notify("Scanning for EPUB files in " .. directory .. "...", vim.log.levels.INFO)
+
+        -- Use async version with callback
+        library.scan_directory(directory, function(result, err)
+            if not result then
+                vim.notify("Error: " .. err, vim.log.levels.ERROR)
+                return
+            end
+
+            local message = string.format(
+                "Scan complete:\n- Total EPUBs found: %d\n- Added to library: %d\n- Already in library: %d",
+                result.total,
+                result.added,
+                result.skipped
+            )
+
+            if #result.errors > 0 then
+                message = message .. "\n- Failed to parse: " .. #result.errors
+                for i, error_info in ipairs(result.errors) do
+                    if i <= 3 then
+                        message = message .. "\n  * " .. vim.fn.fnamemodify(error_info.path, ":t")
+                    end
+                end
+                if #result.errors > 3 then
+                    message = message .. "\n  ... and " .. (#result.errors - 3) .. " more"
+                end
+            end
+
+            vim.notify(message, vim.log.levels.INFO)
+        end)
+    end, {
+        nargs = "?",
+        complete = "dir"
+    })
+
+    -- Create Bookmarks commands
+    vim.api.nvim_create_user_command("InkBookmarks", function()
+        ui.show_all_bookmarks()
+    end, {})
+
+    vim.api.nvim_create_user_command("InkBookmarksBook", function()
+        ui.show_book_bookmarks()
+    end, {})
+
+    -- Create Notes commands
+    vim.api.nvim_create_user_command("InkNotes", function()
+        local notes = require("ink.notes")
+        notes.show_all_notes()
+    end, {})
+
+    vim.api.nvim_create_user_command("InkNotesBook", function()
+        local notes = require("ink.notes")
+        notes.show_book_notes()
+    end, {})
+
+    -- Create Floating TOC command (experimental)
+    vim.api.nvim_create_user_command("InkTocFloat", function()
+        local floating_toc = require("ink.ui.floating_toc")
+        floating_toc.toggle_floating_toc()
+    end, {})
+
+    -- Create Glossary commands
+    vim.api.nvim_create_user_command("InkGlossary", function()
+        local glossary_ui = require("ink.glossary.ui")
+        local context = require("ink.ui.context")
+        local ctx = context.current()
+        if ctx and ctx.data then
+            glossary_ui.show_glossary_browser(ctx.data.slug)
+        else
+            vim.notify("No book is currently open", vim.log.levels.WARN)
+        end
+    end, {})
+
+    vim.api.nvim_create_user_command("InkGlossaryFloating", function()
+        local glossary_ui = require("ink.glossary.ui")
+        local context = require("ink.ui.context")
+        local ctx = context.current()
+        if ctx and ctx.data then
+            glossary_ui.show_glossary_browser(ctx.data.slug, true)  -- Force floating
+        else
+            vim.notify("No book is currently open", vim.log.levels.WARN)
+        end
+    end, {})
+
+    vim.api.nvim_create_user_command("InkGlossaryAdd", function(args)
+        local glossary_ui = require("ink.glossary.ui")
+        local context = require("ink.ui.context")
+        local ctx = context.current()
+        if ctx and ctx.data then
+            local term = args.args ~= "" and args.args or nil
+            glossary_ui.show_add_entry_modal(ctx.data.slug, term, function(entry)
+                if entry then
+                    vim.notify("Glossary entry '" .. entry.term .. "' added", vim.log.levels.INFO)
+                    -- Re-render to show new glossary marks
+                    local render = require("ink.ui.render")
+                    render.invalidate_glossary_cache(ctx)
+                    local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
+                    render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
+                end
+            end)
+        else
+            vim.notify("No book is currently open", vim.log.levels.WARN)
+        end
+    end, { nargs = "?" })
+
+    -- Glossary graph commands
+    vim.api.nvim_create_user_command("InkGlossaryGraph", function()
+        local glossary_ui = require("ink.glossary.ui")
+        local context = require("ink.ui.context")
+        local ctx = context.current()
+        if ctx and ctx.data then
+            glossary_ui.show_full_graph(ctx.data.slug)
+        else
+            vim.notify("No book is currently open", vim.log.levels.WARN)
+        end
+    end, {})
+
+    -- Create Export command
+    vim.api.nvim_create_user_command("InkExport", function()
+        local export_ui = require("ink.export.ui")
+        export_ui.show_export_dialog()
+    end, {})
+
+    -- Create Dashboard command
+    vim.api.nvim_create_user_command("InkDashboard", function(args)
+        local dashboard = require("ink.dashboard")
+        local dashboard_type = args.args ~= "" and args.args or "library"
+        dashboard.show(dashboard_type)
+    end, {
+        nargs = "?",
+        complete = function()
+            return { "library", "stats" }
+        end,
+    })
+
+    -- Create Reset Statistics command
+    vim.api.nvim_create_user_command("InkResetStats", function(args)
+        local force = args.bang
+
+        if force then
+            -- Force reset without confirmation
+            local sessions = require("ink.reading_sessions")
+            sessions.reset_all_statistics()
+            vim.notify("All reading statistics have been reset", vim.log.levels.WARN)
+        else
+            -- Ask for confirmation
+            local confirm = vim.fn.input("Reset all reading statistics? This cannot be undone. (y/N): ")
+            if confirm:lower() == "y" or confirm:lower() == "yes" then
+                local sessions = require("ink.reading_sessions")
+                sessions.reset_all_statistics()
+                vim.notify("All reading statistics have been reset", vim.log.levels.WARN)
+            else
+                vim.notify("Reset cancelled", vim.log.levels.INFO)
+            end
+        end
+    end, {
+        bang = true,
+        desc = "Reset all reading statistics (use ! to skip confirmation)"
+    })
+
+    -- Create Health Check command
+    vim.api.nvim_create_user_command("InkHealth", function()
+        local health = require("ink.health")
+        health.check()
+    end, {
+        desc = "Run health check diagnostics for ink.nvim"
+    })
+
+    -- Create Cache management commands
+    vim.api.nvim_create_user_command("InkClearCache", function(args)
+        local arg = args.args
+
+        if arg == "" then
+            -- No argument: show interactive UI
+            local cache_ui = require("ink.ui.cache")
+            cache_ui.show_clear_cache_ui()
+        elseif arg == "--all" then
+            -- --all flag: clear all cache with confirmation
+            local cache_ui = require("ink.ui.cache")
+            cache_ui.clear_all_cache()
+        else
+            -- Specific slug provided
+            local success, message = epub.clear_cache(arg)
+            if success then
+                vim.notify(message, vim.log.levels.INFO)
+            else
+                vim.notify(message, vim.log.levels.ERROR)
+            end
+        end
+    end, {
+        nargs = "?",
+        desc = "Clear EPUB cache (interactive, --all, or specific slug)"
+    })
+
+    -- Create Clear Search Index command
+    vim.api.nvim_create_user_command("InkClearSearchIndex", function(args)
+        local context = require("ink.ui.context")
+        local search_index = require("ink.ui.search_index")
+
+        local slug = args.args
+
+        if slug == "" then
+            -- Clear for current book
+            local ctx = context.current()
+            if not ctx or not ctx.data then
+                vim.notify("No book currently open", vim.log.levels.WARN)
+                return
+            end
+
+            slug = ctx.data.slug
+            ctx.search_index = nil -- Clear in-memory cache too
+        end
+
+        search_index.clear_cached_index(slug)
+        vim.notify(string.format("Search index cleared for: %s", slug), vim.log.levels.INFO)
+    end, {
+        nargs = "?",
+        desc = "Clear search index cache for current book or specified slug"
+    })
+
+    vim.api.nvim_create_user_command("InkCacheInfo", function()
+        local info = epub.get_cache_info()
+        if info.exists then
+            vim.notify(
+                string.format("EPUB Cache: %d books cached\nLocation: %s", info.total_books, info.path),
+                vim.log.levels.INFO
+            )
+        else
+            vim.notify("No cache directory found", vim.log.levels.INFO)
+        end
+    end, {})
+
+    -- Global keymaps for library features
+    local keymaps = M.config.keymaps
+    local opts = { noremap = true, silent = true }
+
+    if keymaps.library then
+        vim.api.nvim_set_keymap("n", keymaps.library, ":InkLibrary<CR>", opts)
     end
-  end, {
-    bang = true,
-    desc = "Reset all reading statistics (use ! to skip confirmation)"
-  })
 
-  -- Create Health Check command
-  vim.api.nvim_create_user_command("InkHealth", function()
-    local health = require("ink.health")
-    health.check()
-  end, {
-    desc = "Run health check diagnostics for ink.nvim"
-  })
-
-  -- Create Cache management commands
-  vim.api.nvim_create_user_command("InkClearCache", function(args)
-    local arg = args.args
-
-    if arg == "" then
-      -- No argument: show interactive UI
-      local cache_ui = require("ink.ui.cache")
-      cache_ui.show_clear_cache_ui()
-    elseif arg == "--all" then
-      -- --all flag: clear all cache with confirmation
-      local cache_ui = require("ink.ui.cache")
-      cache_ui.clear_all_cache()
-    else
-      -- Specific slug provided
-      local success, message = epub.clear_cache(arg)
-      if success then
-        vim.notify(message, vim.log.levels.INFO)
-      else
-        vim.notify(message, vim.log.levels.ERROR)
-      end
-    end
-  end, {
-    nargs = "?",
-    desc = "Clear EPUB cache (interactive, --all, or specific slug)"
-  })
-
-  -- Create Clear Search Index command
-  vim.api.nvim_create_user_command("InkClearSearchIndex", function(args)
-    local context = require("ink.ui.context")
-    local search_index = require("ink.ui.search_index")
-
-    local slug = args.args
-
-    if slug == "" then
-      -- Clear for current book
-      local ctx = context.current()
-      if not ctx or not ctx.data then
-        vim.notify("No book currently open", vim.log.levels.WARN)
-        return
-      end
-
-      slug = ctx.data.slug
-      ctx.search_index = nil  -- Clear in-memory cache too
+    if keymaps.last_book then
+        vim.api.nvim_set_keymap("n", keymaps.last_book, ":InkLast<CR>", opts)
     end
 
-    search_index.clear_cached_index(slug)
-    vim.notify(string.format("Search index cleared for: %s", slug), vim.log.levels.INFO)
-  end, {
-    nargs = "?",
-    desc = "Clear search index cache for current book or specified slug"
-  })
-
-  vim.api.nvim_create_user_command("InkCacheInfo", function()
-    local info = epub.get_cache_info()
-    if info.exists then
-      vim.notify(
-        string.format("EPUB Cache: %d books cached\nLocation: %s", info.total_books, info.path),
-        vim.log.levels.INFO
-      )
-    else
-      vim.notify("No cache directory found", vim.log.levels.INFO)
+    -- Global keymaps for bookmarks
+    local bookmark_keymaps = M.config.bookmark_keymaps
+    if bookmark_keymaps.list_all then
+        vim.api.nvim_set_keymap("n", bookmark_keymaps.list_all, ":InkBookmarks<CR>", opts)
     end
-  end, {})
+    if bookmark_keymaps.list_book then
+        vim.api.nvim_set_keymap("n", bookmark_keymaps.list_book, ":InkBookmarksBook<CR>", opts)
+    end
 
-  -- Global keymaps for library features
-  local keymaps = M.config.keymaps
-  local opts = { noremap = true, silent = true }
+    -- Global keymaps for notes
+    local notes_list_keymaps = M.config.notes_list_keymaps
+    if notes_list_keymaps.list_all then
+        vim.api.nvim_set_keymap("n", notes_list_keymaps.list_all, ":InkNotes<CR>", opts)
+    end
+    if notes_list_keymaps.list_book then
+        vim.api.nvim_set_keymap("n", notes_list_keymaps.list_book, ":InkNotesBook<CR>", opts)
+    end
 
-  if keymaps.library then
-    vim.api.nvim_set_keymap("n", keymaps.library, ":InkLibrary<CR>", opts)
-  end
+    -- Global keymaps for export
+    local export_keymaps = M.config.export_keymaps
+    if export_keymaps.current_book then
+        vim.api.nvim_set_keymap("n", export_keymaps.current_book, ":InkExport<CR>", opts)
+    end
 
-  if keymaps.last_book then
-    vim.api.nvim_set_keymap("n", keymaps.last_book, ":InkLast<CR>", opts)
-  end
+    -- Global keymap for dashboard
+    if keymaps.dashboard then
+        vim.api.nvim_set_keymap("n", keymaps.dashboard, ":InkDashboard<CR>", opts)
+    end
 
-  -- Global keymaps for bookmarks
-  local bookmark_keymaps = M.config.bookmark_keymaps
-  if bookmark_keymaps.list_all then
-    vim.api.nvim_set_keymap("n", bookmark_keymaps.list_all, ":InkBookmarks<CR>", opts)
-  end
-  if bookmark_keymaps.list_book then
-    vim.api.nvim_set_keymap("n", bookmark_keymaps.list_book, ":InkBookmarksBook<CR>", opts)
-  end
-
-  -- Global keymaps for export
-  local export_keymaps = M.config.export_keymaps
-  if export_keymaps.current_book then
-    vim.api.nvim_set_keymap("n", export_keymaps.current_book, ":InkExport<CR>", opts)
-  end
-
-  -- Global keymap for dashboard
-  if keymaps.dashboard then
-    vim.api.nvim_set_keymap("n", keymaps.dashboard, ":InkDashboard<CR>", opts)
-  end
-
-  -- Setup automatic tracking
-  if M.config.tracking and M.config.tracking.enabled then
-    require("ink.tracking").setup(M.config)
-  end
+    -- Setup automatic tracking
+    if M.config.tracking and M.config.tracking.enabled then
+        require("ink.tracking").setup(M.config)
+    end
 end
 
 return M

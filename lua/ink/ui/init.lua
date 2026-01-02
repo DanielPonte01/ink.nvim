@@ -37,6 +37,8 @@ M.render_chapter = render.render_chapter
 M.render_toc = render.render_toc
 M.toggle_toc = render.toggle_toc
 M.toggle_note_display = render.toggle_note_display
+M.toggle_glossary_display = render.toggle_glossary_display
+M.invalidate_glossary_cache = render.invalidate_glossary_cache
 
 -- Re-export Notes/Highlights
 M.add_note = notes.add_note
@@ -67,6 +69,192 @@ M.show_book_bookmarks = bookmarks_ui.show_book_bookmarks
 M.show_clear_cache_ui = cache_ui.show_clear_cache_ui
 M.clear_book_cache = cache_ui.clear_book_cache
 M.clear_all_cache = cache_ui.clear_all_cache
+
+-- Glossary functions
+function M.add_glossary_from_selection()
+  local ctx = context.current()
+  if not ctx or not ctx.data then
+    vim.notify("No book is currently open", vim.log.levels.WARN)
+    return
+  end
+
+  local glossary_ui = require("ink.glossary.ui")
+  glossary_ui.add_from_selection(ctx.data.slug, function(entry)
+    if entry then
+      vim.notify("Glossary entry '" .. entry.term .. "' saved", vim.log.levels.INFO)
+      -- Re-render to show new glossary marks
+      render.invalidate_glossary_cache(ctx)
+      local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
+      render.render_chapter(ctx.current_chapter_idx, cursor, ctx)
+    end
+  end)
+end
+
+function M.add_glossary_under_cursor()
+  local ctx = context.current()
+  if not ctx or not ctx.data then
+    vim.notify("No book is currently open", vim.log.levels.WARN)
+    return
+  end
+
+  local glossary_ui = require("ink.glossary.ui")
+
+  -- Check if cursor is on an existing glossary term
+  local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
+  local line = cursor[1]
+  local col = cursor[2]
+
+  local glossary_match = glossary_ui.get_match_at_cursor(line, col)
+
+  if glossary_match then
+    -- Cursor is on existing glossary term - open full edit
+    local entry = ctx.glossary_detection_index.entries[glossary_match.entry_id]
+    if entry then
+      glossary_ui.show_edit_entry_modal(ctx.data.slug, entry, function(updated_entry)
+        if updated_entry then
+          vim.notify("Glossary entry '" .. updated_entry.term .. "' updated", vim.log.levels.INFO)
+          render.invalidate_glossary_cache(ctx)
+          local cursor_pos = vim.api.nvim_win_get_cursor(ctx.content_win)
+          render.render_chapter(ctx.current_chapter_idx, cursor_pos, ctx)
+        end
+      end, true)  -- true = allow changing type
+    end
+  else
+    -- No glossary term under cursor - require visual selection to add new term
+    vim.notify("Select text to add to glossary", vim.log.levels.INFO)
+  end
+end
+
+function M.preview_glossary()
+  local ctx = context.current()
+  if not ctx then return end
+
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local line = cursor[1]
+  local col = cursor[2]
+
+  local glossary_ui = require("ink.glossary.ui")
+  local glossary_match = glossary_ui.get_match_at_cursor(line, col)
+
+  if glossary_match then
+    glossary_ui.show_entry_preview(glossary_match)
+  else
+    vim.notify("No glossary term at cursor", vim.log.levels.INFO)
+  end
+end
+
+function M.show_glossary_browser()
+  local ctx = context.current()
+  if not ctx or not ctx.data then
+    vim.notify("No book is currently open", vim.log.levels.WARN)
+    return
+  end
+
+  local glossary_ui = require("ink.glossary.ui")
+  glossary_ui.show_glossary_browser(ctx.data.slug)
+end
+
+function M.show_glossary_graph()
+  local ctx = context.current()
+  if not ctx or not ctx.data then
+    vim.notify("No book is currently open", vim.log.levels.WARN)
+    return
+  end
+
+  local glossary_ui = require("ink.glossary.ui")
+  glossary_ui.show_full_graph(ctx.data.slug)
+end
+
+function M.show_term_graph_under_cursor()
+  local ctx = context.current()
+  if not ctx or not ctx.data then
+    vim.notify("No book is currently open", vim.log.levels.WARN)
+    return
+  end
+
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local line = cursor[1]
+  local col = cursor[2]
+
+  local glossary_ui = require("ink.glossary.ui")
+
+  -- Check if cursor is on a glossary term
+  local glossary_match = glossary_ui.get_match_at_cursor(line, col)
+
+  if glossary_match then
+    local entry = ctx.glossary_detection_index.entries[glossary_match.entry_id]
+    if entry then
+      glossary_ui.show_term_graph(ctx.data.slug, entry)
+    end
+  else
+    vim.notify("No glossary term at cursor", vim.log.levels.INFO)
+  end
+end
+
+function M.edit_glossary_under_cursor()
+  local ctx = context.current()
+  if not ctx or not ctx.data then
+    vim.notify("No book is currently open", vim.log.levels.WARN)
+    return
+  end
+
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local line = cursor[1]
+  local col = cursor[2]
+
+  local glossary_ui = require("ink.glossary.ui")
+  local glossary = require("ink.glossary")
+
+  -- Check if cursor is on a glossary term
+  local glossary_match = glossary_ui.get_match_at_cursor(line, col)
+
+  if glossary_match then
+    -- Get the entry
+    local entry = ctx.glossary_detection_index.entries[glossary_match.entry_id]
+    if entry then
+      -- Quick edit: only definition, keep type unchanged
+      glossary_ui.show_edit_entry_modal(ctx.data.slug, entry, function(updated_entry)
+        if updated_entry then
+          vim.notify("Glossary entry '" .. updated_entry.term .. "' updated", vim.log.levels.INFO)
+          render.invalidate_glossary_cache(ctx)
+          local cursor_pos = vim.api.nvim_win_get_cursor(ctx.content_win)
+          render.render_chapter(ctx.current_chapter_idx, cursor_pos, ctx)
+        end
+      end, false)  -- false = only edit definition, not type
+    end
+  else
+    vim.notify("No glossary term at cursor. Use <leader>ga to add one.", vim.log.levels.INFO)
+  end
+end
+
+function M.remove_glossary_under_cursor()
+  local ctx = context.current()
+  if not ctx or not ctx.data then
+    vim.notify("No book is currently open", vim.log.levels.WARN)
+    return
+  end
+
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local line = cursor[1]
+  local col = cursor[2]
+
+  local glossary_ui = require("ink.glossary.ui")
+  local glossary = require("ink.glossary")
+
+  -- Check if cursor is on a glossary term
+  local glossary_match = glossary_ui.get_match_at_cursor(line, col)
+
+  if glossary_match then
+    -- Get the entry
+    local entry = ctx.glossary_detection_index.entries[glossary_match.entry_id]
+    if entry then
+      -- Use the centralized removal function
+      glossary_ui.remove_glossary_entry(ctx.data.slug, entry)
+    end
+  else
+    vim.notify("No glossary term at cursor", vim.log.levels.INFO)
+  end
+end
 
 function M.open_book(epub_data)
   book_loader.open_book(epub_data)
