@@ -2,26 +2,26 @@ local util = require("ink.export.util")
 
 local M = {}
 
--- Mapeamento de meses em português
-local MONTHS_PT = {
-  "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
-  "Jul", "Ago", "Set", "Out", "Nov", "Dez"
+-- English month names
+local MONTHS = {
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
 }
 
--- Format timestamp to pt-BR readable format
+-- Format timestamp to readable format
 -- Example: 1735824000 -> "02 Jan 2026 14:30"
-local function format_date_ptbr(timestamp)
+local function format_date(timestamp)
   if not timestamp then
-    return "Data desconhecida"
+    return "Unknown date"
   end
-  
+
   local date_table = os.date("*t", timestamp)
   local day = string.format("%02d", date_table.day)
-  local month = MONTHS_PT[date_table.month]
+  local month = MONTHS[date_table.month]
   local year = date_table.year
   local hour = string.format("%02d", date_table.hour)
   local min = string.format("%02d", date_table.min)
-  
+
   return string.format("%s %s %d %s:%s", day, month, year, hour, min)
 end
 
@@ -34,24 +34,24 @@ local function format_metadata_section(metadata)
   table.insert(lines, "")
   
   -- Metadata table
-  table.insert(lines, "| Campo | Valor |")
+  table.insert(lines, "| Field | Value |")
   table.insert(lines, "|-------|-------|")
-  table.insert(lines, "| **Autor** | " .. metadata.author .. " |")
-  
+  table.insert(lines, "| **Author** | " .. metadata.author .. " |")
+
   if metadata.language and metadata.language ~= "" then
-    table.insert(lines, "| **Idioma** | " .. metadata.language .. " |")
+    table.insert(lines, "| **Language** | " .. metadata.language .. " |")
   end
-  
+
   if metadata.date and metadata.date ~= "" then
-    table.insert(lines, "| **Publicado** | " .. metadata.date .. " |")
+    table.insert(lines, "| **Published** | " .. metadata.date .. " |")
   end
-  
-  table.insert(lines, "| **Exportado em** | " .. format_date_ptbr(metadata.export_date) .. " |")
+
+  table.insert(lines, "| **Exported on** | " .. format_date(metadata.export_date) .. " |")
   table.insert(lines, "")
   
   -- Description (if exists)
   if metadata.description and metadata.description ~= "" then
-    table.insert(lines, "## Descrição")
+    table.insert(lines, "## Description")
     table.insert(lines, util.word_wrap(metadata.description, 80))
     table.insert(lines, "")
   end
@@ -63,7 +63,7 @@ end
 local function format_toc_section(highlights_grouped, chapter_map)
   local lines = {}
   
-  table.insert(lines, "## 📑 Índice")
+  table.insert(lines, "## 📑 Table of Contents")
   table.insert(lines, "")
   table.insert(lines, "- [Highlights](#highlights)")
   
@@ -77,7 +77,7 @@ local function format_toc_section(highlights_grouped, chapter_map)
   -- Add link for each chapter with highlights
   for _, ch in ipairs(chapters) do
     local chapter_title = chapter_map[ch] or ("Chapter " .. ch)
-    local full_title = "Capítulo " .. ch .. ": " .. chapter_title
+    local full_title = "Chapter " .. ch .. ": " .. chapter_title
     local slug = util.slugify(full_title)
     table.insert(lines, "  - [" .. full_title .. "](#" .. slug .. ")")
   end
@@ -113,7 +113,7 @@ local function format_highlight(hl, include_context)
   
   -- Note (if exists)
   if has_note then
-    table.insert(lines, "📝 **Nota:** " .. hl.note)
+    table.insert(lines, "📝 **Note:** " .. hl.note)
     table.insert(lines, "")
   end
   
@@ -133,7 +133,7 @@ local function format_highlight(hl, include_context)
         ctx_line = ctx_line .. " " .. context_after .. "..."
       end
       
-      table.insert(lines, "**Contexto:** " .. util.word_wrap(ctx_line, 80))
+      table.insert(lines, "**Context:** " .. util.word_wrap(ctx_line, 80))
       table.insert(lines, "")
     end
   end
@@ -161,7 +161,7 @@ local function format_highlights_section(highlights_grouped, chapter_map, includ
     local highlights = highlights_grouped[ch]
     
     -- Chapter header (serves as location for all highlights in this chapter)
-    table.insert(lines, "### Capítulo " .. ch .. ": " .. chapter_title)
+    table.insert(lines, "### Chapter " .. ch .. ": " .. chapter_title)
     table.insert(lines, "")
     
     -- Format each highlight in this chapter
@@ -199,13 +199,13 @@ local function format_bookmarks_section(bookmarks, chapter_map)
     local chapter_title = chapter_map[bm.chapter] or ("Chapter " .. bm.chapter)
     
     -- Bookmark name with icon
-    table.insert(lines, "📑 **" .. (bm.name or "Sem nome") .. "**")
+    table.insert(lines, "📑 **" .. (bm.name or "Unnamed") .. "**")
     table.insert(lines, "")
-    
+
     -- Location and date
-    local location_line = "📍 Cap. " .. bm.chapter .. " - " .. chapter_title
+    local location_line = "📍 Ch. " .. bm.chapter .. " - " .. chapter_title
     if bm.created_at then
-      location_line = location_line .. " | Criado: " .. format_date_ptbr(bm.created_at)
+      location_line = location_line .. " | Created: " .. format_date(bm.created_at)
     end
     table.insert(lines, location_line)
     table.insert(lines, "")
@@ -257,7 +257,7 @@ function M.format(book_data, options)
   else
     table.insert(sections, "## Highlights")
     table.insert(sections, "")
-    table.insert(sections, "*Nenhum highlight encontrado.*")
+    table.insert(sections, "*No highlights found.*")
     table.insert(sections, "")
   end
   
