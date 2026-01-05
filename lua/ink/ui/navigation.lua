@@ -239,8 +239,9 @@ function M.increase_width()
   local ctx = context.current()
   if not ctx then return end
   local step = context.config.width_step or 10
-  local current = context.config.max_width or 120
-  context.config.max_width = current + step
+  local current = ctx.current_max_width or context.config.max_width or 120
+  ctx.current_max_width = current + step
+  ctx.manual_width_override = true  -- Disable adaptive width until reset
 
   -- Invalidate cache and re-render
   ctx.parsed_chapters:clear()
@@ -249,16 +250,17 @@ function M.increase_width()
   local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
   render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
 
-  vim.notify("Width: " .. context.config.max_width, vim.log.levels.INFO)
+  vim.notify("Width: " .. ctx.current_max_width .. " (adaptive disabled)", vim.log.levels.INFO)
 end
 
 function M.decrease_width()
   local ctx = context.current()
   if not ctx then return end
   local step = context.config.width_step or 10
-  local current = context.config.max_width or 120
+  local current = ctx.current_max_width or context.config.max_width or 120
   local new_width = math.max(40, current - step)
-  context.config.max_width = new_width
+  ctx.current_max_width = new_width
+  ctx.manual_width_override = true  -- Disable adaptive width until reset
 
   -- Invalidate cache and re-render
   ctx.parsed_chapters:clear()
@@ -267,14 +269,24 @@ function M.decrease_width()
   local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
   render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
 
-  vim.notify("Width: " .. context.config.max_width, vim.log.levels.INFO)
+  vim.notify("Width: " .. ctx.current_max_width .. " (adaptive disabled)", vim.log.levels.INFO)
 end
 
 function M.reset_width()
   local ctx = context.current()
   if not ctx then return end
   if ctx.default_max_width then
-    context.config.max_width = ctx.default_max_width
+    ctx.current_max_width = ctx.default_max_width
+    ctx.manual_width_override = false  -- Re-enable adaptive width
+
+    -- Recalculate adaptive width based on current window size
+    local book_loader = require("ink.ui.book_loader")
+    if book_loader.calculate_adaptive_width then
+      local adaptive_width = book_loader.calculate_adaptive_width(ctx)
+      if adaptive_width then
+        ctx.current_max_width = adaptive_width
+      end
+    end
 
     -- Invalidate cache since parsing depends on max_width
     ctx.parsed_chapters:clear()
@@ -283,7 +295,7 @@ function M.reset_width()
     local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
     render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
 
-    vim.notify("Width reset: " .. context.config.max_width, vim.log.levels.INFO)
+    vim.notify("Width reset: " .. ctx.current_max_width .. " (adaptive enabled)", vim.log.levels.INFO)
   end
 end
 

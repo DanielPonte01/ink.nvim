@@ -9,6 +9,48 @@ local utils = require("ink.utils")
 
 local M = {}
 
+-- Track if we've already warned about invalid margin
+local margin_warning_shown = false
+
+-- Helper to calculate adaptive width based on window size
+local function calculate_adaptive_width(ctx)
+  if not context.config.adaptive_width then
+    return nil  -- Adaptive width disabled, don't modify current_max_width
+  end
+
+  if ctx.manual_width_override then
+    return nil  -- User manually adjusted width, respect their choice until reset
+  end
+
+  if not ctx.content_win or not vim.api.nvim_win_is_valid(ctx.content_win) then
+    return nil  -- No valid window, can't calculate
+  end
+
+  local win_width = vim.api.nvim_win_get_width(ctx.content_win)
+  local margin = context.config.adaptive_width_margin or 0.8
+
+  -- Validate margin is within reasonable bounds (0.1 to 1.0)
+  if margin < 0.1 or margin > 1.0 then
+    if not margin_warning_shown then
+      vim.notify(
+        string.format("Invalid adaptive_width_margin (%.2f), using default 0.8", margin),
+        vim.log.levels.WARN
+      )
+      margin_warning_shown = true
+    end
+    margin = 0.8
+  end
+
+  local new_max_width = math.floor(win_width * margin)
+
+  -- Enforce minimum of 40 and don't exceed default max_width
+  local min_width = 40
+  local default_max = ctx.default_max_width or context.config.max_width
+  new_max_width = math.max(min_width, math.min(new_max_width, default_max))
+
+  return new_max_width
+end
+
 -- Helper to find buffer by name
 local function find_buf_by_name(name)
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
@@ -73,6 +115,7 @@ function M.setup_book_context(content_buf, toc_buf, book_data)
   ctx.toc_buf = toc_buf
   ctx.content_buf = content_buf
   ctx.default_max_width = context.config.max_width
+  ctx.current_max_width = context.config.max_width  -- Initialize with default, will be adjusted by adaptive width
 
   return ctx
 end
@@ -267,6 +310,16 @@ function M.setup_book_autocmds(content_buf, slug)
         local resized_wins = vim.v.event.windows or {}
         for _, win_id in ipairs(resized_wins) do
           if win_id == current_ctx.content_win then
+            -- Adaptive width: adjust max_width based on window size (per-context)
+            local new_max_width = calculate_adaptive_width(current_ctx)
+            if new_max_width and current_ctx.current_max_width ~= new_max_width then
+              current_ctx.current_max_width = new_max_width
+
+              -- Invalidate caches when width changes
+              current_ctx.parsed_chapters = require("ink.cache.lru").new(15)
+              current_ctx.search_index = nil
+            end
+
             -- Invalidate glossary cache since positions depend on window width
             render.invalidate_glossary_cache(current_ctx)
 
@@ -389,10 +442,6 @@ function M.setup_book_autocmds(content_buf, slug)
             end
           end
         end
-
-        if current_ctx.default_max_width then
-          context.config.max_width = current_ctx.default_max_width
-        end
       end
 
       -- End reading session
@@ -498,6 +547,12 @@ function M.open_book(book_data)
   -- Schedule chapter rendering to ensure window has been resized after TOC toggle
   -- This prevents glossary marks from being calculated with incorrect window width
   vim.schedule(function()
+    -- Calculate initial adaptive width based on actual window size after TOC is created
+    local initial_width = calculate_adaptive_width(ctx)
+    if initial_width then
+      ctx.current_max_width = initial_width
+    end
+
     -- Load saved position or render first chapter
     local saved = state.load(book_data.slug)
     if saved then
@@ -535,5 +590,8 @@ function M.open_book(book_data)
   M.setup_book_keymaps(content_buf, toc_buf)
   M.setup_book_autocmds(content_buf, book_data.slug)
 end
+
+-- Export calculate_adaptive_width for use in other modules (e.g., reset_width)
+M.calculate_adaptive_width = calculate_adaptive_width
 
 return M

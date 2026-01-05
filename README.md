@@ -22,7 +22,7 @@ Read books and documents without leaving your editor. Full support for EPUB file
 - **Smart caching**: EPUBs extracted once, automatically invalidated on file changes
 - **Syntax highlighting** for code blocks and formatted text
 - **Text justification** (optional, toggle on/off)
-- **Adjustable width** for comfortable reading
+- **Adaptive width**: Automatically adjusts text width based on window size (manual override supported)
 - **Progress tracking** with automatic session restoration
 
 ### Annotations
@@ -106,6 +106,8 @@ require("ink").setup({
   justify_text = false,
   max_width = 120,
   width_step = 10,
+  adaptive_width = true,              -- Automatically adjust text width based on window size
+  adaptive_width_margin = 0.8,        -- Use 80% of window width (0.1 to 1.0, maintains 10% margin on each side)
 
   -- All keymaps are customizable
   keymaps = {
@@ -244,6 +246,19 @@ See the [default configuration](#configuration) above for all keymaps and option
 3. Press `<leader>na` to add a note on the highlight
 4. Change color with `<leader>hcy` (preserves notes)
 5. Toggle display modes: off, indicator (•), expanded
+
+#### Adaptive Width
+Text width automatically adapts to your window size for optimal reading comfort:
+
+- **Automatic adjustment**: When enabled (default), text width uses 80% of window width
+- **Window resize**: Text reflows when you open/close TOC, padnotes, or resize windows
+- **Per-book isolation**: Each book/tab maintains independent width settings
+- **Manual override**: Adjust width manually with `<leader>+` and `<leader>-`
+  - Disables adaptive width with notification: "Width: 90 (adaptive disabled)"
+  - Prevents automatic adjustments until reset
+- **Reset adaptive**: Press `<leader>=` to restore adaptive behavior
+  - Notification: "Width reset: 72 (adaptive enabled)"
+  - Recalculates width based on current window size
 
 #### Bookmarks
 - Add multiple bookmarks per paragraph with `<leader>ba`

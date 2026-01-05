@@ -199,7 +199,7 @@ function M.get_parsed_chapter(chapter_idx, ctx)
   if not content then return nil end
 
   -- Parse HTML with current settings
-  local max_width = context.config.max_width or 120
+  local max_width = ctx.current_max_width or context.config.max_width or 120
   local class_styles = ctx.data.class_styles or {}
   local justify_text = context.config.justify_text or false
   local typography = context.config.typography or {
@@ -292,7 +292,7 @@ function M.render_chapter(idx, restore_line, ctx)
     return
   end
 
-  local max_width = context.config.max_width or 120
+  local max_width = ctx.current_max_width or context.config.max_width or 120
   local typography = context.config.typography or { line_spacing = 1 }
 
   -- Apply line spacing if needed

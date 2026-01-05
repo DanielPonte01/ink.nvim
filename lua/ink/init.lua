@@ -28,6 +28,8 @@ local default_config = {
     },
     max_width = 120,
     width_step = 10, -- How much to change width per keypress
+    adaptive_width = true, -- Automatically adjust max_width based on window size
+    adaptive_width_margin = 0.8, -- Use 80% of window width when adaptive (0.0-1.0, maintains 10% margin on each side)
     highlight_colors = {
         yellow = { bg = "#E8C89F", fg = "#000000" },
         green = { bg = "#8BB894", fg = "#000000" },
