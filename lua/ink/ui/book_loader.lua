@@ -310,6 +310,9 @@ function M.setup_book_autocmds(content_buf, slug)
         local resized_wins = vim.v.event.windows or {}
         for _, win_id in ipairs(resized_wins) do
           if win_id == current_ctx.content_win then
+            -- Save viewport position (text-based, survives word wrap changes)
+            local viewport_ctx = render.get_viewport_text_context(current_ctx)
+
             -- Adaptive width: adjust max_width based on window size (per-context)
             local new_max_width = calculate_adaptive_width(current_ctx)
             if new_max_width and current_ctx.current_max_width ~= new_max_width then
@@ -323,8 +326,14 @@ function M.setup_book_autocmds(content_buf, slug)
             -- Invalidate glossary cache since positions depend on window width
             render.invalidate_glossary_cache(current_ctx)
 
-            local cursor = vim.api.nvim_win_get_cursor(current_ctx.content_win)
-            render.render_chapter(current_ctx.current_chapter_idx, cursor[1], current_ctx)
+            render.render_chapter(current_ctx.current_chapter_idx, nil, current_ctx)
+
+            -- Restore viewport immediately (render_chapter is synchronous)
+            if vim.api.nvim_win_is_valid(current_ctx.content_win) then
+              vim.api.nvim_set_current_win(current_ctx.content_win)
+              render.restore_viewport_from_context(current_ctx, viewport_ctx)
+            end
+
             break
           end
         end

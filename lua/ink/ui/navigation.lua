@@ -243,12 +243,20 @@ function M.increase_width()
   ctx.current_max_width = current + step
   ctx.manual_width_override = true  -- Disable adaptive width until reset
 
+  -- Save viewport position (text-based, survives word wrap changes)
+  local viewport_ctx = render.get_viewport_text_context(ctx)
+
   -- Invalidate cache and re-render
   ctx.parsed_chapters:clear()
   ctx.search_index = nil
   render.invalidate_glossary_cache(ctx)
-  local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
-  render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
+  render.render_chapter(ctx.current_chapter_idx, nil, ctx)
+
+  -- Restore viewport immediately (render_chapter is synchronous)
+  if vim.api.nvim_win_is_valid(ctx.content_win) then
+    vim.api.nvim_set_current_win(ctx.content_win)
+    render.restore_viewport_from_context(ctx, viewport_ctx)
+  end
 
   vim.notify("Width: " .. ctx.current_max_width .. " (adaptive disabled)", vim.log.levels.INFO)
 end
@@ -262,12 +270,20 @@ function M.decrease_width()
   ctx.current_max_width = new_width
   ctx.manual_width_override = true  -- Disable adaptive width until reset
 
+  -- Save viewport position (text-based, survives word wrap changes)
+  local viewport_ctx = render.get_viewport_text_context(ctx)
+
   -- Invalidate cache and re-render
   ctx.parsed_chapters:clear()
   ctx.search_index = nil
   render.invalidate_glossary_cache(ctx)
-  local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
-  render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
+  render.render_chapter(ctx.current_chapter_idx, nil, ctx)
+
+  -- Restore viewport immediately (render_chapter is synchronous)
+  if vim.api.nvim_win_is_valid(ctx.content_win) then
+    vim.api.nvim_set_current_win(ctx.content_win)
+    render.restore_viewport_from_context(ctx, viewport_ctx)
+  end
 
   vim.notify("Width: " .. ctx.current_max_width .. " (adaptive disabled)", vim.log.levels.INFO)
 end
@@ -288,12 +304,22 @@ function M.reset_width()
       end
     end
 
+    -- Save viewport position (text-based, survives word wrap changes)
+    local viewport_ctx = render.get_viewport_text_context(ctx)
+
     -- Invalidate cache since parsing depends on max_width
     ctx.parsed_chapters:clear()
     ctx.search_index = nil
     render.invalidate_glossary_cache(ctx)
-    local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
-    render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
+    render.render_chapter(ctx.current_chapter_idx, nil, ctx)
+
+    -- Restore viewport (text-based, keeps same content visible)
+    vim.schedule(function()
+      if vim.api.nvim_win_is_valid(ctx.content_win) then
+        vim.api.nvim_set_current_win(ctx.content_win)
+        render.restore_viewport_from_context(ctx, viewport_ctx)
+      end
+    end)
 
     vim.notify("Width reset: " .. ctx.current_max_width .. " (adaptive enabled)", vim.log.levels.INFO)
   end
@@ -304,12 +330,20 @@ function M.toggle_justify()
   if not ctx then return end
   context.config.justify_text = not context.config.justify_text
 
+  -- Save viewport position (text-based, survives word wrap changes)
+  local viewport_ctx = render.get_viewport_text_context(ctx)
+
   -- Invalidate cache since parsing depends on justify_text
   ctx.parsed_chapters:clear()
   ctx.search_index = nil
   render.invalidate_glossary_cache(ctx)
-  local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
-  render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
+  render.render_chapter(ctx.current_chapter_idx, nil, ctx)
+
+  -- Restore viewport immediately (render_chapter is synchronous)
+  if vim.api.nvim_win_is_valid(ctx.content_win) then
+    vim.api.nvim_set_current_win(ctx.content_win)
+    render.restore_viewport_from_context(ctx, viewport_ctx)
+  end
 
   vim.notify("Justify: " .. (context.config.justify_text and "on" or "off"), vim.log.levels.INFO)
 end
@@ -330,12 +364,22 @@ function M.increase_line_spacing()
   local new_spacing = math.min(5, current + 1)  -- Max 5
   context.config.typography.line_spacing = new_spacing
 
+  -- Save view (viewport position) to prevent text from jumping
+  local view = vim.fn.winsaveview()
+
   -- Invalidate cache since parsing depends on typography
   ctx.parsed_chapters:clear()
   ctx.search_index = nil
   render.invalidate_glossary_cache(ctx)
-  local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
-  render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
+  render.render_chapter(ctx.current_chapter_idx, view.lnum, ctx)
+
+  -- Restore view (keeps text at same visual position)
+  vim.schedule(function()
+    if vim.api.nvim_win_is_valid(ctx.content_win) then
+      vim.api.nvim_set_current_win(ctx.content_win)
+      vim.fn.winrestview(view)
+    end
+  end)
 
   vim.notify("Line spacing: " .. new_spacing, vim.log.levels.INFO)
 end
@@ -356,12 +400,22 @@ function M.decrease_line_spacing()
   local new_spacing = math.max(1, current - 1)  -- Min 1
   context.config.typography.line_spacing = new_spacing
 
+  -- Save view (viewport position) to prevent text from jumping
+  local view = vim.fn.winsaveview()
+
   -- Invalidate cache since parsing depends on typography
   ctx.parsed_chapters:clear()
   ctx.search_index = nil
   render.invalidate_glossary_cache(ctx)
-  local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
-  render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
+  render.render_chapter(ctx.current_chapter_idx, view.lnum, ctx)
+
+  -- Restore view (keeps text at same visual position)
+  vim.schedule(function()
+    if vim.api.nvim_win_is_valid(ctx.content_win) then
+      vim.api.nvim_set_current_win(ctx.content_win)
+      vim.fn.winrestview(view)
+    end
+  end)
 
   vim.notify("Line spacing: " .. new_spacing, vim.log.levels.INFO)
 end
@@ -382,12 +436,22 @@ function M.increase_paragraph_spacing()
   local new_spacing = math.min(5, current + 1)  -- Max 5
   context.config.typography.paragraph_spacing = new_spacing
 
+  -- Save view (viewport position) to prevent text from jumping
+  local view = vim.fn.winsaveview()
+
   -- Invalidate cache since parsing depends on typography
   ctx.parsed_chapters:clear()
   ctx.search_index = nil
   render.invalidate_glossary_cache(ctx)
-  local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
-  render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
+  render.render_chapter(ctx.current_chapter_idx, view.lnum, ctx)
+
+  -- Restore view (keeps text at same visual position)
+  vim.schedule(function()
+    if vim.api.nvim_win_is_valid(ctx.content_win) then
+      vim.api.nvim_set_current_win(ctx.content_win)
+      vim.fn.winrestview(view)
+    end
+  end)
 
   vim.notify("Paragraph spacing: " .. new_spacing, vim.log.levels.INFO)
 end
@@ -408,12 +472,22 @@ function M.decrease_paragraph_spacing()
   local new_spacing = math.max(1, current - 1)  -- Min 1
   context.config.typography.paragraph_spacing = new_spacing
 
+  -- Save view (viewport position) to prevent text from jumping
+  local view = vim.fn.winsaveview()
+
   -- Invalidate cache since parsing depends on typography
   ctx.parsed_chapters:clear()
   ctx.search_index = nil
   render.invalidate_glossary_cache(ctx)
-  local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
-  render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
+  render.render_chapter(ctx.current_chapter_idx, view.lnum, ctx)
+
+  -- Restore view (keeps text at same visual position)
+  vim.schedule(function()
+    if vim.api.nvim_win_is_valid(ctx.content_win) then
+      vim.api.nvim_set_current_win(ctx.content_win)
+      vim.fn.winrestview(view)
+    end
+  end)
 
   vim.notify("Paragraph spacing: " .. new_spacing, vim.log.levels.INFO)
 end
@@ -432,12 +506,22 @@ function M.reset_line_spacing()
 
   context.config.typography.line_spacing = 1
 
+  -- Save view (viewport position) to prevent text from jumping
+  local view = vim.fn.winsaveview()
+
   -- Invalidate cache since parsing depends on typography
   ctx.parsed_chapters:clear()
   ctx.search_index = nil
   render.invalidate_glossary_cache(ctx)
-  local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
-  render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
+  render.render_chapter(ctx.current_chapter_idx, view.lnum, ctx)
+
+  -- Restore view (keeps text at same visual position)
+  vim.schedule(function()
+    if vim.api.nvim_win_is_valid(ctx.content_win) then
+      vim.api.nvim_set_current_win(ctx.content_win)
+      vim.fn.winrestview(view)
+    end
+  end)
 
   vim.notify("Line spacing reset: 1", vim.log.levels.INFO)
 end
@@ -456,12 +540,22 @@ function M.reset_paragraph_spacing()
 
   context.config.typography.paragraph_spacing = 1
 
+  -- Save view (viewport position) to prevent text from jumping
+  local view = vim.fn.winsaveview()
+
   -- Invalidate cache since parsing depends on typography
   ctx.parsed_chapters:clear()
   ctx.search_index = nil
   render.invalidate_glossary_cache(ctx)
-  local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
-  render.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
+  render.render_chapter(ctx.current_chapter_idx, view.lnum, ctx)
+
+  -- Restore view (keeps text at same visual position)
+  vim.schedule(function()
+    if vim.api.nvim_win_is_valid(ctx.content_win) then
+      vim.api.nvim_set_current_win(ctx.content_win)
+      vim.fn.winrestview(view)
+    end
+  end)
 
   vim.notify("Paragraph spacing reset: 1", vim.log.levels.INFO)
 end

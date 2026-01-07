@@ -601,8 +601,18 @@ function M.toggle_note_display(ctx)
   else
     ctx.note_display_mode = "off"
   end
-  local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
-  M.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
+
+  -- Save viewport position (text-based, survives word wrap changes)
+  local viewport_ctx = M.get_viewport_text_context(ctx)
+
+  M.render_chapter(ctx.current_chapter_idx, nil, ctx)
+
+  -- Restore viewport immediately (render_chapter is synchronous)
+  if vim.api.nvim_win_is_valid(ctx.content_win) then
+    vim.api.nvim_set_current_win(ctx.content_win)
+    M.restore_viewport_from_context(ctx, viewport_ctx)
+  end
+
   vim.notify("Note display: " .. ctx.note_display_mode, vim.log.levels.INFO)
 end
 
@@ -613,11 +623,17 @@ function M.toggle_glossary_display(ctx)
   -- Toggle the visibility state
   ctx.glossary_visible = not ctx.glossary_visible
 
-  -- Get current cursor position
-  local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
+  -- Save viewport position (text-based, survives word wrap changes)
+  local viewport_ctx = M.get_viewport_text_context(ctx)
 
   -- Re-render the chapter to apply/remove glossary marks
-  M.render_chapter(ctx.current_chapter_idx, cursor[1], ctx)
+  M.render_chapter(ctx.current_chapter_idx, nil, ctx)
+
+  -- Restore viewport immediately (render_chapter is synchronous)
+  if vim.api.nvim_win_is_valid(ctx.content_win) then
+    vim.api.nvim_set_current_win(ctx.content_win)
+    M.restore_viewport_from_context(ctx, viewport_ctx)
+  end
 
   -- Notify user
   local status = ctx.glossary_visible and "visible" or "hidden"
@@ -645,7 +661,85 @@ function M.invalidate_glossary_cache(ctx)
   end
 end
 
+-- Get text-based viewport position (for preserving scroll during re-renders)
+local function get_viewport_text_context(ctx)
+  if not ctx.content_win or not vim.api.nvim_win_is_valid(ctx.content_win) then
+    return nil
+  end
+
+  if not ctx.content_buf or not vim.api.nvim_buf_is_valid(ctx.content_buf) then
+    return nil
+  end
+
+  -- Get cursor position
+  local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
+  local cursor_line = cursor[1]
+
+  -- Get text from cursor line (single API call)
+  local lines = vim.api.nvim_buf_get_lines(ctx.content_buf, cursor_line - 1, cursor_line, false)
+  if not lines or not lines[1] or lines[1]:match("^%s*$") then
+    return { cursor_fallback = cursor_line }
+  end
+
+  -- Normalize and extract first ~40 characters (survives word wrap)
+  local normalized = lines[1]:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+  if #normalized < 15 then
+    return { cursor_fallback = cursor_line }
+  end
+
+  local search_snippet = normalized:sub(1, math.min(40, #normalized))
+
+  return {
+    search_text = { search_snippet },
+    cursor_fallback = cursor_line
+  }
+end
+
+-- Restore viewport based on text context
+local function restore_viewport_from_context(ctx, viewport_ctx)
+  if not viewport_ctx or not ctx.content_win or not vim.api.nvim_win_is_valid(ctx.content_win) then
+    return false
+  end
+
+  -- If we have search text, try to find it (limit search range for performance)
+  if viewport_ctx.search_text and #viewport_ctx.search_text > 0 then
+    local search = viewport_ctx.search_text[1]
+    local total_lines = vim.api.nvim_buf_line_count(ctx.content_buf)
+
+    -- Start search near cursor fallback position (±50 lines window)
+    local start_line = math.max(1, (viewport_ctx.cursor_fallback or 1) - 50)
+    local end_line = math.min(total_lines, (viewport_ctx.cursor_fallback or 1) + 50)
+
+    -- Get limited range of lines for faster search
+    local lines = vim.api.nvim_buf_get_lines(ctx.content_buf, start_line - 1, end_line, false)
+
+    -- Search for the text
+    for i, line in ipairs(lines) do
+      local normalized = line:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+      if normalized:find(search, 1, true) then
+        -- Found it! Position cursor here and center it
+        local actual_line = start_line + i - 1
+        vim.api.nvim_win_set_cursor(ctx.content_win, {actual_line, 0})
+        vim.cmd("normal! zz")
+        return true
+      end
+    end
+  end
+
+  -- Fallback: use cursor line and center
+  if viewport_ctx.cursor_fallback then
+    local total_lines = vim.api.nvim_buf_line_count(ctx.content_buf)
+    local cursor_target = math.min(viewport_ctx.cursor_fallback, total_lines)
+    vim.api.nvim_win_set_cursor(ctx.content_win, {cursor_target, 0})
+    vim.cmd("normal! zz")
+  end
+
+  return false
+end
+
 -- Export for use in other modules
 M.get_current_position_context = get_current_position_context
+M.get_viewport_text_context = get_viewport_text_context
+M.restore_viewport_from_context = restore_viewport_from_context
 
 return M
