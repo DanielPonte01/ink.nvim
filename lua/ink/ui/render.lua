@@ -671,27 +671,35 @@ local function get_viewport_text_context(ctx)
     return nil
   end
 
-  -- Get cursor position
+  -- Get cursor position and total lines for relative positioning
   local cursor = vim.api.nvim_win_get_cursor(ctx.content_win)
   local cursor_line = cursor[1]
+  local total_lines = vim.api.nvim_buf_line_count(ctx.content_buf)
 
   -- Get text from cursor line (single API call)
   local lines = vim.api.nvim_buf_get_lines(ctx.content_buf, cursor_line - 1, cursor_line, false)
   if not lines or not lines[1] or lines[1]:match("^%s*$") then
-    return { cursor_fallback = cursor_line }
+    return {
+      cursor_fallback = cursor_line,
+      total_lines = total_lines
+    }
   end
 
   -- Normalize and extract first ~40 characters (survives word wrap)
   local normalized = lines[1]:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
   if #normalized < 15 then
-    return { cursor_fallback = cursor_line }
+    return {
+      cursor_fallback = cursor_line,
+      total_lines = total_lines
+    }
   end
 
   local search_snippet = normalized:sub(1, math.min(40, #normalized))
 
   return {
     search_text = { search_snippet },
-    cursor_fallback = cursor_line
+    cursor_fallback = cursor_line,
+    total_lines = total_lines
   }
 end
 
@@ -701,19 +709,17 @@ local function restore_viewport_from_context(ctx, viewport_ctx)
     return false
   end
 
-  -- If we have search text, try to find it (limit search range for performance)
+  -- If we have search text, try to find it by searching the entire buffer
   if viewport_ctx.search_text and #viewport_ctx.search_text > 0 then
     local search = viewport_ctx.search_text[1]
     local total_lines = vim.api.nvim_buf_line_count(ctx.content_buf)
 
-    -- Start search near cursor fallback position (±50 lines window)
-    local start_line = math.max(1, (viewport_ctx.cursor_fallback or 1) - 50)
-    local end_line = math.min(total_lines, (viewport_ctx.cursor_fallback or 1) + 50)
+    -- First try: search near the old cursor position (±100 lines for better coverage)
+    local start_line = math.max(1, (viewport_ctx.cursor_fallback or 1) - 100)
+    local end_line = math.min(total_lines, (viewport_ctx.cursor_fallback or 1) + 100)
 
-    -- Get limited range of lines for faster search
     local lines = vim.api.nvim_buf_get_lines(ctx.content_buf, start_line - 1, end_line, false)
 
-    -- Search for the text
     for i, line in ipairs(lines) do
       local normalized = line:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
       if normalized:find(search, 1, true) then
@@ -724,14 +730,38 @@ local function restore_viewport_from_context(ctx, viewport_ctx)
         return true
       end
     end
+
+    -- Second try: search entire buffer (width changes can move text far away)
+    lines = vim.api.nvim_buf_get_lines(ctx.content_buf, 0, -1, false)
+    for i, line in ipairs(lines) do
+      local normalized = line:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+      if normalized:find(search, 1, true) then
+        -- Found it! Position cursor here and center it
+        vim.api.nvim_win_set_cursor(ctx.content_win, {i, 0})
+        vim.cmd("normal! zz")
+        return true
+      end
+    end
   end
 
-  -- Fallback: use cursor line and center
+  -- Fallback: estimate relative position based on line ratio
   if viewport_ctx.cursor_fallback then
     local total_lines = vim.api.nvim_buf_line_count(ctx.content_buf)
-    local cursor_target = math.min(viewport_ctx.cursor_fallback, total_lines)
-    vim.api.nvim_win_set_cursor(ctx.content_win, {cursor_target, 0})
-    vim.cmd("normal! zz")
+
+    -- Try to maintain relative position in the chapter
+    -- If we had cursor at 20% through the old buffer, try to put it at ~20% in new buffer
+    if viewport_ctx.total_lines and viewport_ctx.total_lines > 0 then
+      local relative_pos = viewport_ctx.cursor_fallback / viewport_ctx.total_lines
+      local new_cursor_line = math.floor(total_lines * relative_pos)
+      local cursor_target = math.max(1, math.min(new_cursor_line, total_lines))
+      vim.api.nvim_win_set_cursor(ctx.content_win, {cursor_target, 0})
+      vim.cmd("normal! zz")
+    else
+      -- Simple fallback: just use the old line number (clamped to new buffer size)
+      local cursor_target = math.min(viewport_ctx.cursor_fallback, total_lines)
+      vim.api.nvim_win_set_cursor(ctx.content_win, {cursor_target, 0})
+      vim.cmd("normal! zz")
+    end
   end
 
   return false
