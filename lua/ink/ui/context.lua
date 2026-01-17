@@ -80,11 +80,19 @@ end
 M.ctx = setmetatable({}, {
   __index = function(_, k)
     local ctx = M.current()
-    return ctx and ctx[k]
+    if not ctx then
+      vim.notify("Warning: Attempted to read context key '" .. tostring(k) .. "' but no context exists", vim.log.levels.WARN)
+      return nil
+    end
+    return ctx[k]
   end,
   __newindex = function(_, k, v)
     local ctx = M.current()
-    if ctx then ctx[k] = v end
+    if not ctx then
+      vim.notify("Warning: Attempted to set context key '" .. tostring(k) .. "' but no context exists", vim.log.levels.WARN)
+      return
+    end
+    ctx[k] = v
   end
 })
 

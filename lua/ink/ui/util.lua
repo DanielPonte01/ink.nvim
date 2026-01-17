@@ -118,7 +118,7 @@ function M.offset_to_line_col(lines, offset)
   local current_offset = 0
   for i, line in ipairs(lines) do
     local line_len = #line + 1
-    if current_offset + #line >= offset then
+    if current_offset + line_len > offset then
       return i, offset - current_offset
     end
     current_offset = current_offset + line_len

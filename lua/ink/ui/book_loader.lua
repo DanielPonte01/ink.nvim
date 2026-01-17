@@ -461,17 +461,6 @@ function M.setup_book_autocmds(content_buf, slug)
     end,
   })
 
-  -- Buffer delete handler for TOC buffer (cleanup only, no state saving)
-  vim.api.nvim_create_autocmd("BufDelete", {
-    group = augroup,
-    buffer = toc_buf,
-    callback = function(ev)
-      -- Only process if the buffer being deleted is the TOC buffer
-      if ev.buf ~= toc_buf then return end
-      -- TOC buffer cleanup - don't save state here
-    end,
-  })
-
   -- VimLeavePre: Save position before Vim closes (safety net)
   vim.api.nvim_create_autocmd("VimLeavePre", {
     group = augroup,

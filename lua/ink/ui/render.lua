@@ -70,7 +70,7 @@ local function get_current_position_context(ctx, cursor_line)
   -- If on empty line, find next non-empty line
   if line_text:match("^%s*$") then
     for i = cursor_line + 1, #lines do
-      if not lines[i]:match("^%s*$") then
+      if lines[i] and not lines[i]:match("^%s*$") then
         actual_line = i
         line_text = lines[i]
         break
@@ -81,7 +81,7 @@ local function get_current_position_context(ctx, cursor_line)
   -- Still empty? Use first non-empty line
   if line_text:match("^%s*$") then
     for i = 1, #lines do
-      if not lines[i]:match("^%s*$") then
+      if lines[i] and not lines[i]:match("^%s*$") then
         actual_line = i
         line_text = lines[i]
         break
@@ -542,12 +542,21 @@ function M.render_chapter(idx, restore_line, ctx)
 
       -- restore_line can be either a number (line only) or a table {line, col}
       if type(restore_line) == "table" then
-        local line = math.max(1, math.min(restore_line[1], total_lines))
-        local col = restore_line[2] or 0
-        vim.api.nvim_win_set_cursor(ctx.content_win, {line, col})
-      else
+        -- Validate that table has required fields and they are numbers
+        if type(restore_line[1]) == "number" then
+          local line = math.max(1, math.min(restore_line[1], total_lines))
+          local col = type(restore_line[2]) == "number" and restore_line[2] or 0
+          vim.api.nvim_win_set_cursor(ctx.content_win, {line, col})
+        else
+          -- Invalid table format, default to line 1
+          vim.api.nvim_win_set_cursor(ctx.content_win, {1, 0})
+        end
+      elseif type(restore_line) == "number" then
         local line = math.max(1, math.min(restore_line, total_lines))
         vim.api.nvim_win_set_cursor(ctx.content_win, {line, 0})
+      else
+        -- Invalid type, default to line 1
+        vim.api.nvim_win_set_cursor(ctx.content_win, {1, 0})
       end
     else
       vim.api.nvim_win_set_cursor(ctx.content_win, {1, 0})

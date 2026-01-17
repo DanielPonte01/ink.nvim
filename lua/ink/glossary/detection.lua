@@ -1,5 +1,14 @@
 local M = {}
 
+-- Fallback for vim.pesc for older Neovim versions
+local function escape_pattern(str)
+  if vim.pesc then
+    return vim.pesc(str)
+  end
+  -- Manual escape for pattern special characters
+  return str:gsub("[%(%)%.%%%+%-%*%?%[%]%^%$]", "%%%1")
+end
+
 -- Calculate a version hash for the glossary based on terms and aliases
 -- Only includes data that affects detection (not definitions or relationships)
 function M.calculate_version_hash(entries)
@@ -108,7 +117,7 @@ function M.detect_in_text(text, detection_index)
   for _, term in ipairs(terms) do
     -- Use word boundary pattern: %f[%w] = frontier pattern for word start
     -- %f[%W] = frontier pattern for word end
-    local pattern = "%f[%w]" .. vim.pesc(term) .. "%f[%W]"
+    local pattern = "%f[%w]" .. escape_pattern(term) .. "%f[%W]"
     local start_pos = 1
 
     while true do
