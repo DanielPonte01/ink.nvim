@@ -420,7 +420,7 @@ function M.render_chapter(idx, restore_line, ctx)
   -- Apply user highlights using extmarks module
   local chapter_highlights = get_user_highlights().get_chapter_highlights(ctx.data.slug, idx)
   local extmarks_module = get_extmarks()
-  extmarks_module.apply_user_highlights(ctx.content_buf, chapter_highlights, context.ns_id, final_lines)
+  extmarks_module.apply_user_highlights(ctx.content_buf, chapter_highlights, context.ns_id, final_lines, ctx.data.slug, idx)
 
   -- Apply note indicators or margin notes based on mode
   if ctx.note_display_mode == "margin" then

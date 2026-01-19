@@ -702,13 +702,13 @@ function M.open_book_at_cursor()
 		return
 	end
 
-	-- Open book
-	local epub = require("ink.epub")
+	-- Open book using format detection
+	local library_core = require("ink.library.core")
 	local ui = require("ink.ui")
 
-	local book_data, err = epub.open(book.path)
-	if not book_data then
-		vim.notify("Failed to open book: " .. (err or "unknown error"), vim.log.levels.ERROR)
+	local success, book_data = library_core.open_book(book.path, book.format)
+	if not success or not book_data then
+		vim.notify("Failed to open book: " .. (book_data or "unknown error"), vim.log.levels.ERROR)
 		return
 	end
 

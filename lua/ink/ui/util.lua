@@ -138,7 +138,12 @@ function M.line_col_to_offset(lines, line, col)
   return offset + col
 end
 
-function M.find_text_position(lines, text, context_before, context_after)
+function M.find_text_position(lines, text, context_before, context_after, allow_fallback)
+  -- Default to true for backwards compatibility
+  if allow_fallback == nil then
+    allow_fallback = true
+  end
+
   local full_text = M.get_full_text(lines)
   local normalized_full = M.normalize_whitespace(full_text)
   local normalized_text = M.normalize_whitespace(text)
@@ -175,29 +180,33 @@ function M.find_text_position(lines, text, context_before, context_after)
     end
   end
 
-  local match_start_simple = normalized_full:find(normalized_text, 1, true)
-  if match_start_simple then
-    local norm_pos = 0
-    local start_orig = nil
-    local end_orig = nil
-    for i = 1, #full_text do
-      local char = full_text:sub(i, i)
-      local is_space = char:match("%s")
-      if is_space then
-        local prev_char = i > 1 and full_text:sub(i-1, i-1) or ""
-        if not prev_char:match("%s") then norm_pos = norm_pos + 1 end
-      else
-        norm_pos = norm_pos + 1
+  -- Fallback: search without context (only if allowed)
+  if allow_fallback then
+    local match_start_simple = normalized_full:find(normalized_text, 1, true)
+    if match_start_simple then
+      local norm_pos = 0
+      local start_orig = nil
+      local end_orig = nil
+      for i = 1, #full_text do
+        local char = full_text:sub(i, i)
+        local is_space = char:match("%s")
+        if is_space then
+          local prev_char = i > 1 and full_text:sub(i-1, i-1) or ""
+          if not prev_char:match("%s") then norm_pos = norm_pos + 1 end
+        else
+          norm_pos = norm_pos + 1
+        end
+        if norm_pos == match_start_simple and not start_orig then start_orig = i end
+        if norm_pos == match_start_simple + #normalized_text - 1 then end_orig = i; break end
       end
-      if norm_pos == match_start_simple and not start_orig then start_orig = i end
-      if norm_pos == match_start_simple + #normalized_text - 1 then end_orig = i; break end
-    end
-    if start_orig and end_orig then
-      local start_line, start_col = M.offset_to_line_col(lines, start_orig - 1)
-      local end_line, end_col = M.offset_to_line_col(lines, end_orig)
-      return start_line, start_col, end_line, end_col
+      if start_orig and end_orig then
+        local start_line, start_col = M.offset_to_line_col(lines, start_orig - 1)
+        local end_line, end_col = M.offset_to_line_col(lines, end_orig)
+        return start_line, start_col, end_line, end_col
+      end
     end
   end
+
   return nil
 end
 
@@ -212,7 +221,7 @@ function M.get_highlight_at_cursor(ctx)
 
   for _, hl in ipairs(chapter_highlights) do
     local start_line, start_col, end_line, end_col = M.find_text_position(
-      ctx.rendered_lines, hl.text, hl.context_before, hl.context_after
+      ctx.rendered_lines, hl.text, hl.context_before, hl.context_after, false  -- Strict matching for highlights
     )
     if start_line then
       local hl_start_offset = M.line_col_to_offset(ctx.rendered_lines, start_line, start_col)

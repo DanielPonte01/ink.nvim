@@ -5,6 +5,9 @@ local util = require("ink.ui.util")
 
 local M = {}
 
+-- Track which chapters have already shown orphan warnings (per session)
+local orphan_warnings_shown = {}
+
 function M.apply_syntax_highlights(buf, highlights, ns_id, padding)
     padding = padding or 0
     if not highlights or #highlights == 0 then return end
@@ -52,10 +55,13 @@ function M.apply_syntax_highlights(buf, highlights, ns_id, padding)
     end
 end
 
-function M.apply_user_highlights(buf, chapter_highlights, ns_id, lines)
+function M.apply_user_highlights(buf, chapter_highlights, ns_id, lines, slug, chapter_idx)
+    local orphaned_count = 0
+    local rendered_count = 0
+
     for _, hl in ipairs(chapter_highlights) do
         local start_line, start_col, end_line, end_col = util.find_text_position(
-            lines, hl.text, hl.context_before, hl.context_after
+            lines, hl.text, hl.context_before, hl.context_after, false  -- Strict matching for highlights
         )
         if start_line then
             hl._start_line = start_line
@@ -66,8 +72,29 @@ function M.apply_user_highlights(buf, chapter_highlights, ns_id, lines)
             vim.api.nvim_buf_set_extmark(buf, ns_id, start_line - 1, start_col, {
                 end_line = end_line - 1, end_col = end_col, hl_group = hl_group, priority = 2000
             })
+            rendered_count = rendered_count + 1
+        else
+            orphaned_count = orphaned_count + 1
         end
     end
+
+    -- Notify user if some highlights could not be rendered (once per chapter per session)
+    if orphaned_count > 0 and slug and chapter_idx then
+        local warning_key = slug .. ":" .. chapter_idx
+        if not orphan_warnings_shown[warning_key] then
+            orphan_warnings_shown[warning_key] = true
+            vim.notify(
+                string.format(
+                    "One or more highlights could not be rendered (%d/%d). Text may have been modified or removed.",
+                    orphaned_count,
+                    orphaned_count + rendered_count
+                ),
+                vim.log.levels.WARN
+            )
+        end
+    end
+
+    return { rendered = rendered_count, orphaned = orphaned_count }
 end
 
 function M.apply_note_indicators(buf, chapter_highlights, note_display_mode, padding, max_width, ns_id)

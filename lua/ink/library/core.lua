@@ -152,10 +152,13 @@ end
 function M.open_book(book_path, book_format)
 	local epub = require("ink.epub")
 	local markdown = require("ink.markdown")
+	local web = require("ink.web")
 
 	-- Detect format if not provided
 	if not book_format then
-		if book_path:match("%.md$") or book_path:match("%.markdown$") then
+		if book_path:match("^https?://") and web.is_planalto_url(book_path) then
+			book_format = "web"
+		elseif book_path:match("%.md$") or book_path:match("%.markdown$") then
 			book_format = "markdown"
 		else
 			book_format = "epub"
@@ -163,7 +166,9 @@ function M.open_book(book_path, book_format)
 	end
 
 	-- Open with appropriate parser
-	if book_format == "markdown" then
+	if book_format == "web" then
+		return pcall(web.open, book_path)
+	elseif book_format == "markdown" then
 		return pcall(markdown.open, book_path)
 	else
 		return pcall(epub.open, book_path)

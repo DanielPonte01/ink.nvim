@@ -98,6 +98,16 @@ function M.remove_dir(path)
   return result == 0
 end
 
+-- Copy file from source to destination
+function M.copy_file(source, destination)
+  local content = M.read_file(source)
+  if not content then
+    return false, "Failed to read source file"
+  end
+
+  return M.write_file(destination, content)
+end
+
 -- Unzip EPUB to destination
 function M.unzip(epub_path, dest_dir)
   M.ensure_dir(dest_dir)

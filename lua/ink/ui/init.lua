@@ -263,7 +263,13 @@ end
 function M.open_last_book()
   local last_path = library.get_last_book_path()
   if not last_path then vim.notify("No books in library yet", vim.log.levels.INFO); return end
-  if not fs.exists(last_path) then vim.notify("Last book not found: " .. last_path, vim.log.levels.ERROR); return end
+
+  -- Only check file existence for local files (not URLs)
+  local is_url = last_path:match("^https?://")
+  if not is_url and not fs.exists(last_path) then
+    vim.notify("Last book not found: " .. last_path, vim.log.levels.ERROR)
+    return
+  end
 
   -- Get book format from library
   local lib = library.load()
