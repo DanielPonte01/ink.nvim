@@ -1,3 +1,5 @@
+local entities = require("ink.html.entities")
+
 local M = {}
 
 -- Extract content between matching tags (handles nested tags)
@@ -75,6 +77,7 @@ local function extract_title(html)
   -- Try <title> tag first
   local title = html:match("<title>([^<]+)</title>")
   if title then
+    title = entities.decode_entities(title) -- Decode HTML entities
     title = title:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
     return title
   end
@@ -83,6 +86,7 @@ local function extract_title(html)
   title = html:match("<h1[^>]*>(.-)</h1>")
   if title then
     title = title:gsub("<[^>]+>", "")
+    title = entities.decode_entities(title) -- Decode HTML entities
     title = title:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
     return title
   end
@@ -420,6 +424,7 @@ function M.build_toc(parsed_page)
 
     if heading then
       local text = heading:gsub("<[^>]+>", "")
+      text = entities.decode_entities(text) -- Decode HTML entities
       text = text:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
 
       if text ~= "" then

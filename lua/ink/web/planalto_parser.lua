@@ -1,3 +1,5 @@
+local entities = require("ink.html.entities")
+
 local M = {}
 
 -- Extract page number and year from URL or title
@@ -9,6 +11,7 @@ local function extract_page_info(url, html)
 
   local title = html:match("<title>([^<]+)</title>")
   if title then
+    title = entities.decode_entities(title) -- Decode HTML entities
     title = title:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
   end
 
@@ -35,6 +38,7 @@ local function extract_ementa(html)
   local ementa = html:match('<p[^>]*class="ementa"[^>]*>(.-)</p>')
   if ementa then
     ementa = ementa:gsub("<[^>]+>", "")
+    ementa = entities.decode_entities(ementa) -- Decode HTML entities
     ementa = ementa:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
     return ementa
   end
@@ -141,6 +145,36 @@ local function normalize_strikethrough(html)
   return result
 end
 
+-- Remove blockquotes but keep their text content
+-- This prevents content from being styled with InkComment
+local function remove_blockquotes(html)
+  -- Remove <blockquote> tags but keep the content inside
+  local result = html:gsub("<[bB][lL][oO][cC][kK][qQ][uU][oO][tT][eE][^>]*>", "")
+  result = result:gsub("</[bB][lL][oO][cC][kK][qQ][uU][oO][tT][eE]>", "")
+  return result
+end
+
+-- Fix malformed inline tags (unclosed <b>, <strong>, <i>, etc.)
+-- This prevents inline styles from leaking across block boundaries
+-- Simple approach: remove orphaned opening tags (tags that appear alone between/after paragraphs)
+local function fix_malformed_inline_tags(html)
+  local result = html
+
+  -- Remove orphaned inline opening tags (tags that are alone with only whitespace around them)
+  -- Pattern: tag followed by optional whitespace and newlines, but no actual content before </p> or next <p>
+  result = result:gsub("(<[bB]>)%s*\n?%s*(</[pP]>)", "%2")
+  result = result:gsub("(</[pP]>)%s*\n?%s*(<[bB]>)%s*\n?%s*(<[pP])", "%1%3")
+  result = result:gsub("(</[pP]>)%s*\n?%s*(<[bB]>)%s*$", "%1")
+
+  -- Same for </b> tags
+  result = result:gsub("(<[bB]>)%s*(</[bB]>)", "")
+
+  -- Remove <b> tags that are alone at the end (after </p>)
+  result = result:gsub("(</[pP]>.-)<[bB]>%s*$", "%1")
+
+  return result
+end
+
 -- Remove strike-through content (for compiled version)
 -- Uses non-greedy matching and handles potential malformed tags
 local function remove_strikethrough(html)
@@ -164,6 +198,9 @@ local function parse_articles(html)
 
   -- Normalize strikethrough styles to <strike> tags for consistent handling
   html = normalize_strikethrough(html)
+
+  -- Fix malformed inline tags (unclosed <b>, <strong>, etc.)
+  html = fix_malformed_inline_tags(html)
 
   -- Extract the body content
   local body = html:match("<body>(.-)</body>") or html
@@ -266,6 +303,7 @@ local function parse_articles(html)
 
     -- Extract title (first sentence without HTML tags)
     local text_only = compiled_content:gsub("<[^>]+>", "")
+    text_only = entities.decode_entities(text_only) -- Decode HTML entities
     text_only = text_only:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
 
     -- Remove the "Art. X" prefix from title if present
@@ -274,13 +312,25 @@ local function parse_articles(html)
     -- Pattern matches hyphen (-), en-dash (–), and em-dash (—)
     text_only = text_only:gsub("^Art%.%s*%d+[ºo°]?[%-–—]?[A-Z]*%.?%s*[%-–—]?%s*", "")
 
+    -- Clean up any remaining replacement characters or stray ordinal markers at the start
+    -- This handles cases where encoding issues cause � to appear instead of º
+    text_only = text_only:gsub("^[ºo°�]+%s*[%-–—]?%s*", "")
+
+    -- Additional cleanup: if text still starts with a dash, remove it (leftover from "Art. X - ")
+    text_only = text_only:gsub("^[%-–—]+%s*", "")
+
     -- Also try to remove if there's a line break or tag between Art and number
     if text_only:match("^%s*$") or text_only == "" then
       -- Fallback: try to get content after the article marker more broadly
       text_only = compiled_content:gsub("<[^>]+>", "")
+      text_only = entities.decode_entities(text_only) -- Decode HTML entities
       text_only = text_only:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
       -- Try alternative patterns (greedy to handle edge cases)
       text_only = text_only:gsub("^.*Art%.%s*%d+[ºo°]?[%-–—]?[A-Z]*%.?%s*[%-–—]?%s*", "")
+      -- Clean up any remaining replacement characters
+      text_only = text_only:gsub("^[ºo°�]+%s*[%-–—]?%s*", "")
+      -- Additional cleanup: remove leading dashes
+      text_only = text_only:gsub("^[%-–—]+%s*", "")
     end
 
     -- Extract first 80 chars as title, or use placeholder if empty
@@ -380,17 +430,34 @@ function M.build_raw_spine(parsed_page)
 
   -- Start with header content (brasão, título, ementa, preâmbulo)
   if parsed_page.header and parsed_page.header ~= "" then
+    -- Remove blockquotes from header
+    local cleaned_header = remove_blockquotes(parsed_page.header)
     table.insert(content_parts, '<div class="law-header">')
-    table.insert(content_parts, parsed_page.header)
+    table.insert(content_parts, cleaned_header)
     table.insert(content_parts, '</div>')
   end
 
   -- Add all articles
   for _, article in ipairs(parsed_page.articles) do
+    -- Remove blockquotes from raw content
+    local cleaned_content = remove_blockquotes(article.raw)
+
+    -- DEBUG: Log article 337-C to see raw HTML
+    if article.number == "337-C" then
+      local debug_file = io.open("/tmp/ink_debug_337c.html", "w")
+      if debug_file then
+        debug_file:write("=== RAW ARTICLE HTML ===\n")
+        debug_file:write(article.raw)
+        debug_file:write("\n\n=== CLEANED CONTENT ===\n")
+        debug_file:write(cleaned_content)
+        debug_file:close()
+      end
+    end
+
     -- Use concatenation to avoid string.format issues with % in content
     local article_html = '<div class="article" id="article-' .. article.number .. '">\n'
       .. '  <h2>Artigo ' .. article.number .. '</h2>\n'
-      .. '  ' .. article.raw .. '\n'
+      .. '  ' .. cleaned_content .. '\n'
       .. '</div>\n'
     table.insert(content_parts, article_html)
   end
@@ -439,6 +506,8 @@ function M.build_compiled_spine(parsed_page)
   if parsed_page.header and parsed_page.header ~= "" then
     -- Apply strikethrough removal to header as well
     local compiled_header = remove_strikethrough(parsed_page.header)
+    -- Remove blockquotes from header
+    compiled_header = remove_blockquotes(compiled_header)
     table.insert(content_parts, '<div class="law-header">')
     table.insert(content_parts, compiled_header)
     table.insert(content_parts, '</div>')
@@ -454,7 +523,8 @@ function M.build_compiled_spine(parsed_page)
       -- Article is completely revoked - show placeholder
       article_content = '<p><em>(Artigo revogado)</em></p>'
     else
-      article_content = article.compiled
+      -- Remove blockquotes from compiled content
+      article_content = remove_blockquotes(article.compiled)
     end
 
     -- Use concatenation to avoid string.format issues with % in content
