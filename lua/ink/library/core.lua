@@ -131,6 +131,12 @@ function M.remove_book(slug)
 		collections.remove_book_from_all(slug)
 	end
 
+	-- Remove all related resources for this book
+	local ok_related, related = pcall(require, "ink.data.related")
+	if ok_related then
+		related.remove_all_for_book(slug)
+	end
+
 	return true
 end
 

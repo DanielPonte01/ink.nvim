@@ -6,32 +6,36 @@ local ui = require("ink.ui")
 local M = {}
 
 local default_config = {
-    focused_mode = true,
-    image_open = true,
-    justify_text = false, -- Enable text justification (adds spaces between words, affects copying)
+    -- Display settings
+    focused_mode = true,           -- Hide distractions (statusline, etc.) when reading
+    image_open = true,             -- Allow opening images in external viewer
+    justify_text = false,          -- Enable text justification (adds spaces between words, affects copying)
+    max_width = 120,               -- Maximum text width in columns
+    width_step = 10,               -- Width change amount per keypress (+/-)
+    adaptive_width = true,         -- Auto-adjust width based on window size
+    adaptive_width_margin = 0.8,   -- Use 80% of window width (0.1-1.0, maintains margins on sides)
+
+    -- Navigation and interaction keymaps
     keymaps = {
         next_chapter = "]c",
         prev_chapter = "[c",
         toggle_toc = "<leader>t",
-        toggle_floating_toc = "<leader>T", -- Floating TOC (experimental)
-        activate = "<CR>",
-        jump_to_link = "g<CR>",            -- Jump to link target (footnotes, cross-references)
+        toggle_floating_toc = "<leader>T", -- Experimental floating TOC
+        activate = "<CR>",                  -- Preview/open footnote, link, image, or TOC item
+        jump_to_link = "g<CR>",             -- Jump directly to link target
         search_toc = "<leader>pit",
         search_content = "<leader>pif",
-        search_mode_toggle = "<C-f>", -- Toggle between TOC and content search
+        search_mode_toggle = "<C-f>",       -- Switch between TOC and content search in Telescope
         width_increase = "<leader>+",
         width_decrease = "<leader>-",
-        width_reset = "<leader>=",
-        toggle_justify = "<leader>jt", -- Toggle text justification
-        library = "<leader>eL",        -- Open library
-        last_book = "<leader>el",      -- Open last book
-        dashboard = "<leader>ed",      -- Open dashboard
-        related_resources = "<leader>er" -- Show related resources
-    },
-    max_width = 120,
-    width_step = 10, -- How much to change width per keypress
-    adaptive_width = true, -- Automatically adjust max_width based on window size
-    adaptive_width_margin = 0.8, -- Use 80% of window width when adaptive (0.0-1.0, maintains 10% margin on each side)
+        width_reset = "<leader>=",          -- Reset to adaptive width
+        toggle_justify = "<leader>jt",
+        library = "<leader>eL",
+        last_book = "<leader>el",
+        dashboard = "<leader>ed",
+        related_resources = "<leader>er",   -- List related books
+    }
+    -- Highlight colors (add custom colors: purple, orange, pink, etc.)
     highlight_colors = {
         yellow = { bg = "#E8C89F", fg = "#000000" },
         green = { bg = "#8BB894", fg = "#000000" },
@@ -39,55 +43,68 @@ local default_config = {
         blue = { bg = "#7BA3D0", fg = "#000000" },
         none = { bg = "NONE", fg = "NONE" },
     },
+
+    -- Highlight keymaps (in visual mode)
     highlight_keymaps = {
         yellow = "<leader>hy",
         green = "<leader>hg",
         red = "<leader>hr",
         blue = "<leader>hb",
-        remove = "<leader>hd"
+        remove = "<leader>hd",
     },
+
+    -- Change highlight color (preserves notes)
     highlight_change_color_keymaps = {
         yellow = "<leader>hcy",
         green = "<leader>hcg",
         red = "<leader>hcr",
-        blue = "<leader>hcb"
+        blue = "<leader>hcb",
     },
+
+    -- Notes keymaps
     note_keymaps = {
-        add = "<leader>na",           -- Add/edit note on highlight under cursor
-        remove = "<leader>nd",        -- Remove note from highlight under cursor
-        toggle_display = "<leader>nt" -- Toggle note display mode (off/indicator/margin/expanded)
+        add = "<leader>na",           -- Add/edit note on highlight
+        remove = "<leader>nd",
+        toggle_display = "<leader>nt", -- Cycle: off → indicator → margin → expanded
     },
-    note_display_mode = "margin",     -- "off" | "indicator" | "margin" | "expanded"
-    margin_note_width = 35,           -- Maximum width of margin notes
-    margin_min_space = 30,            -- Minimum margin space required for margin mode
+    note_display_mode = "margin",      -- Default display mode: "off" | "indicator" | "margin" | "expanded"
+    margin_note_width = 35,            -- Max width of margin notes (chars)
+    margin_min_space = 30,             -- Min margin space required for margin mode (chars)
     notes_list_keymaps = {
-        list_all = "<leader>nla",     -- List all notes from all books
-        list_book = "<leader>nlb",    -- List notes in current book
+        list_all = "<leader>nla",      -- List notes from all books
+        list_book = "<leader>nlb",
     },
+
+    -- Bookmarks keymaps
     bookmark_keymaps = {
-        add = "<leader>ba", -- Add bookmark
-        edit = "<leader>be", -- Edit bookmark
-        remove = "<leader>bd", -- Remove bookmark
-        next = "<leader>bn", -- Go to next bookmark
-        prev = "<leader>bp", -- Go to previous bookmark
-        list_all = "<leader>bl", -- List all bookmarks
-        list_book = "<leader>bb", -- List bookmarks in current book
+        add = "<leader>ba",
+        edit = "<leader>be",
+        remove = "<leader>bd",
+        next = "<leader>bn",           -- Navigate across chapters
+        prev = "<leader>bp",
+        list_all = "<leader>bl",       -- Global bookmarks list
+        list_book = "<leader>bb",      -- Current book bookmarks
     },
-    bookmark_icon = "📑", -- Default bookmark icon
+    bookmark_icon = "📑",
+
+    -- Export keymaps
     export_keymaps = {
-        current_book = "<leader>ex", -- Export current book
+        current_book = "<leader>ex",
     },
     export_defaults = {
-        format = "markdown", -- "markdown" | "json"
-        include_bookmarks = false,
-        include_context = false,
-        export_dir = "~/Documents", -- Default export directory
+        format = "markdown",       -- "markdown" | "json"
+        include_bookmarks = false, -- Include bookmarks in export
+        include_context = false,   -- Include surrounding text for highlights
+        include_glossary = false,  -- Include glossary terms and relationships
+        export_dir = "~/Documents",
     },
+
+    -- Typography settings
     typography = {
-        line_spacing = 1,      -- Lines between each line of text (1 = normal, 2 = double space)
+        line_spacing = 1,      -- Lines between text lines (1 = normal, 2 = double space)
         paragraph_spacing = 1, -- Lines between paragraphs
-        indent_size = 4,       -- Indent size for blockquotes, code blocks, definitions
-        list_indent = 2,       -- Indent size for nested lists
+        indent_size = 4,       -- Indent for blockquotes, code blocks, definitions
+        list_indent = 2,       -- Indent for nested lists
     },
     typography_keymaps = {
         line_spacing_increase = "<leader>l+",
@@ -97,12 +114,16 @@ local default_config = {
         paragraph_spacing_decrease = "<leader>p-",
         paragraph_spacing_reset = "<leader>p=",
     },
+
+    -- Reading session tracking
     tracking = {
-        enabled = true,           -- Enable/disable reading session tracking
-        auto_save_interval = 300, -- Update interval (seconds) - 5 minutes
-        cleanup_after_days = 365, -- Clean up sessions older than N days (0 = never)
-        grace_period = 1,         -- Days of grace for streak (0 = no grace, 1 = 1 day)
+        enabled = true,           -- Track reading time and sessions
+        auto_save_interval = 300, -- Save interval in seconds (5 min)
+        cleanup_after_days = 365, -- Clean old sessions (0 = never)
+        grace_period = 1,         -- Days of grace for streak continuation
     },
+
+    -- Glossary term types (customize icons and colors)
     glossary_types = {
         character = { icon = "👤", color = "InkGlossaryCharacter" },
         place = { icon = "📍", color = "InkGlossaryPlace" },
@@ -113,40 +134,41 @@ local default_config = {
         foreign_word = { icon = "🌐", color = "InkGlossaryForeign" },
         other = { icon = "📝", color = "InkGlossary" }
     },
-    glossary_visible = true,           -- Show glossary terms in text by default
+    glossary_visible = true, -- Show glossary terms underlined in text
     glossary_keymaps = {
-        add = "<leader>ga",            -- Add glossary entry
-        edit = "<leader>ge",           -- Edit entry under cursor
-        remove = "<leader>gd",         -- Remove entry
-        preview = "<leader>gp",        -- Preview entry (explicit)
-        browser = "<leader>gl",        -- Browse/search all glossary entries
-        show_related = "<leader>gg",   -- Show related entries (term graph)
-        show_graph = "<leader>gG",     -- Show full glossary graph
-        toggle_display = "<leader>gt", -- Toggle glossary term display
+        add = "<leader>ga",
+        edit = "<leader>ge",
+        remove = "<leader>gd",
+        preview = "<leader>gp",        -- Show definition in floating window
+        browser = "<leader>gl",        -- Browse all entries with Telescope
+        show_related = "<leader>gg",   -- Show related terms (relationships)
+        show_graph = "<leader>gG",     -- Visualize term relationships (ASCII/HTML)
+        toggle_display = "<leader>gt", -- Toggle term underlining on/off
     },
+
     -- TOC configuration
-    force_content_toc = false, -- Always build TOC from content headings (H1-H3) instead of using EPUB's official TOC
-    --toc_keymaps = {
-    --    rebuild = "<leader>tr", -- Rebuild TOC from content headings
-    --}
-    -- Padnotes configuration
+    force_content_toc = false, -- Build TOC from content headings instead of EPUB metadata
+
+    -- Padnotes configuration (chapter-specific markdown notes)
     padnotes = {
         enabled = true,
-        path = "default",         -- "default" or custom path. Support {slug}, {author} and {title} Exemple: "~/Documents/ink-notes/{author}/{slug}"
-        auto_save_interval = 120, -- seconds (2 minutes)
-        template = "default",
-        position = "right",       -- "right" | "left" | "top" | "bottom" - where to open padnote window
-        size = 0.5,               -- Window size with two modes:
-                                  --   < 1: percentage mode (0.5 = 50%, 0.3 = 30%, etc.)
-                                  --   >= 1: absolute mode (80 = 80 columns/lines, 15 = 15 lines, etc.)
-                                  -- Minimums enforced: 10 columns for left/right, 5 lines for top/bottom
-                                  -- For very small windows (< 20 cols or < 10 lines), falls back to 50%
+        path = "default",         -- "default" or custom with {slug}, {author}, {title} placeholders
+        auto_save_interval = 120, -- Auto-save interval in seconds
+        template = "default",     -- Custom template (future feature)
+        position = "right",       -- "right" | "left" | "top" | "bottom"
+        size = 0.5,               -- < 1: percentage (0.5 = 50%), >= 1: absolute columns/lines
     },
     padnotes_keymaps = {
-        toggle = "<leader>pa",   -- Add a new padnote. (Smart Toggle: create/open/close/switch)
-        open = "<leader>po",     -- Force open padnote
-        close = "<leader>pc",    -- Force close padnote
-        list_all = "<leader>pl", -- List all padnotes in floating window
+        toggle = "<leader>pa",   -- Smart toggle: create/open/close/switch chapters
+        open = "<leader>po",
+        close = "<leader>pc",
+        list_all = "<leader>pl", -- Browse all padnotes with Telescope
+    },
+
+    -- Related resources (link books together)
+    related_resources = {
+        position = "right", -- Where to open related book
+        show_toc = false,   -- Show TOC when opening (false to avoid clutter)
     },
 }
 
@@ -268,6 +290,22 @@ function M.setup(opts)
     vim.api.nvim_create_user_command("InkLibrary", function()
         ui.show_library()
     end, {})
+
+    -- Create Library filtered commands (disabled but kept for future use)
+    -- vim.api.nvim_create_user_command("InkListEpubs", function()
+    --     local library_view = require("ink.ui.library_view")
+    --     library_view.show_library_by_format("epub")
+    -- end, {})
+
+    -- vim.api.nvim_create_user_command("InkListMarkdown", function()
+    --     local library_view = require("ink.ui.library_view")
+    --     library_view.show_library_by_format("markdown")
+    -- end, {})
+
+    -- vim.api.nvim_create_user_command("InkListWeb", function()
+    --     local library_view = require("ink.ui.library_view")
+    --     library_view.show_library_by_format("web")
+    -- end, {})
 
     -- Create Last Book command
     vim.api.nvim_create_user_command("InkLast", function()
@@ -727,6 +765,52 @@ function M.setup(opts)
         ui.show_related_resources()
     end, {
         desc = "Show related resources for the current book in telescope"
+    })
+
+    -- Create Clean Orphan References command
+    vim.api.nvim_create_user_command("InkCleanupRelated", function(args)
+        local force = args.bang
+        local related = require("ink.data.related")
+
+        -- First check if there are orphans
+        local orphans = related.get_orphan_references()
+
+        if #orphans == 0 then
+            vim.notify("No orphan references found. All related resources are valid.", vim.log.levels.INFO)
+            return
+        end
+
+        -- Show what will be cleaned
+        vim.notify(string.format("Found %d orphan reference(s) to deleted books", #orphans), vim.log.levels.WARN)
+
+        if not force then
+            -- Ask for confirmation
+            local confirm = vim.fn.input(string.format(
+                "Clean up %d orphan reference(s)? This will remove references to deleted books. (y/N): ",
+                #orphans
+            ))
+
+            if confirm:lower() ~= "y" and confirm:lower() ~= "yes" then
+                vim.notify("Cleanup cancelled", vim.log.levels.INFO)
+                return
+            end
+        end
+
+        -- Perform cleanup
+        local cleaned_count, cleaned_slugs = related.cleanup_orphans()
+
+        if cleaned_count > 0 or #cleaned_slugs > 0 then
+            vim.notify(
+                string.format("Cleanup complete: removed %d orphan entries and references to %d deleted books",
+                    cleaned_count, #cleaned_slugs),
+                vim.log.levels.INFO
+            )
+        else
+            vim.notify("Cleanup complete: no changes needed", vim.log.levels.INFO)
+        end
+    end, {
+        bang = true,
+        desc = "Clean up orphan references in related.json (use ! to skip confirmation)"
     })
 
     -- Global keymaps for library features

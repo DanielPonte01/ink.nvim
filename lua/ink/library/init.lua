@@ -53,6 +53,12 @@ M.get_to_read_books = queries.get_to_read_books
 -- Get last opened book path
 M.get_last_book_path = queries.get_last_book_path
 
+-- Get books by format
+M.get_books_by_format = queries.get_books_by_format
+
+-- Get books grouped by format
+M.get_books_grouped_by_format = queries.get_books_grouped_by_format
+
 -- === STATISTICS ===
 
 -- Get aggregated statistics

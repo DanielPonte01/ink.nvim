@@ -55,6 +55,7 @@ M.search_content = search.search_content
 
 -- Re-export Library
 M.show_library = library_view.show_library
+M.show_library_by_format = library_view.show_library_by_format
 
 -- Re-export Bookmarks
 M.add_bookmark = bookmarks_ui.add_bookmark
@@ -261,8 +262,8 @@ function M.remove_glossary_under_cursor()
   end
 end
 
-function M.open_book(epub_data)
-  book_loader.open_book(epub_data)
+function M.open_book(epub_data, opts)
+  book_loader.open_book(epub_data, opts)
 end
 
 function M.open_last_book()

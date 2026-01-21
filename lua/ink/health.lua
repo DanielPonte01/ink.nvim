@@ -89,7 +89,7 @@ local function check_library_integrity()
   return true
 end
 
--- Check for broken EPUB paths in library
+-- Check for broken book paths in library
 local function check_broken_paths()
   local library_data = require("ink.library.data")
   local library = library_data.load()
@@ -101,19 +101,38 @@ local function check_broken_paths()
 
   local broken_count = 0
   local broken_books = {}
+  local local_count = 0
+  local web_count = 0
 
   for _, book in ipairs(library.books) do
-    if book.path and not fs.exists(book.path) then
-      broken_count = broken_count + 1
-      table.insert(broken_books, book.title or book.slug)
+    -- Determine if this is a web URL or local file
+    local is_web = book.path and (book.path:match("^https?://") or book.format == "web")
+
+    if is_web then
+      web_count = web_count + 1
+      -- Skip path existence check for web resources
+      -- They are validated when opened, not at filesystem level
+    else
+      -- Local file - check if it exists
+      local_count = local_count + 1
+      if book.path and not fs.exists(book.path) then
+        broken_count = broken_count + 1
+        table.insert(broken_books, book.title or book.slug)
+      end
     end
   end
 
+  -- Report results
   if broken_count == 0 then
-    add_result("ok", string.format("All %d book paths are valid", #library.books))
+    if web_count > 0 then
+      add_result("ok", string.format("All %d local book paths are valid (%d web resources skipped)",
+        local_count, web_count))
+    else
+      add_result("ok", string.format("All %d book paths are valid", #library.books))
+    end
     return true
   else
-    add_result("warn", string.format("%d books have broken paths:", broken_count))
+    add_result("warn", string.format("%d local books have broken paths:", broken_count))
     for i, title in ipairs(broken_books) do
       if i <= 5 then -- Show max 5
         add_result("warn", "  - " .. title)
@@ -196,6 +215,70 @@ local function check_collections_integrity()
   return true
 end
 
+-- Check related.json integrity and orphan references
+local function check_related_integrity()
+  local related_path = data.get_data_dir() .. "/related.json"
+
+  if not fs.exists(related_path) then
+    add_result("ok", "No related.json yet (will be created when you link books)")
+    return true
+  end
+
+  local content = fs.read_file(related_path)
+  if not content or content == "" then
+    add_result("warn", "related.json exists but is empty")
+    return true
+  end
+
+  -- Check if valid JSON
+  local ok, related_data = pcall(vim.json.decode, content)
+  if not ok then
+    add_result("error", "related.json is corrupted (invalid JSON)")
+    return false
+  end
+
+  -- Count total relationships
+  local total_relationships = 0
+  local books_with_relations = 0
+  for slug, relations in pairs(related_data) do
+    if type(relations) == "table" then
+      books_with_relations = books_with_relations + 1
+      total_relationships = total_relationships + vim.tbl_count(relations)
+    end
+  end
+
+  add_result("ok", string.format("related.json is valid (%d books with %d relationships)",
+    books_with_relations, total_relationships))
+
+  -- Check for orphan references
+  local ok_related, related_module = pcall(require, "ink.data.related")
+  if not ok_related then
+    add_result("warn", "Could not load related module to check orphans")
+    return true
+  end
+
+  local orphans = related_module.get_orphan_references()
+  if #orphans == 0 then
+    add_result("ok", "No orphan references found (all references are valid)")
+    return true
+  end
+
+  -- Found orphans - report them
+  add_result("warn", string.format("Found %d orphan reference(s) to deleted books:", #orphans))
+  for i, orphan in ipairs(orphans) do
+    if i <= 3 then -- Show max 3
+      add_result("warn", string.format("  - '%s' (referenced by %d book(s))",
+        orphan.slug, #orphan.referenced_by))
+    end
+  end
+  if #orphans > 3 then
+    add_result("warn", string.format("  ... and %d more", #orphans - 3))
+  end
+  add_result("warn", "  Run :lua require('ink.data.related').cleanup_orphans() to fix")
+
+  return true
+end
+
 -- Check Neovim version
 local function check_neovim_version()
   local version = vim.version()
@@ -249,6 +332,7 @@ function M.check()
   check_library_integrity()
   check_broken_paths()
   check_collections_integrity()
+  check_related_integrity()
   check_cache()
 
   -- Display results

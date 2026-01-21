@@ -42,19 +42,29 @@ function M.show_library_telescope(books)
   local action_state = require('telescope.actions.state')
   local previewers = require('telescope.previewers')
 
+  -- Format icons
+  local format_icons = {
+    epub = "📚",
+    markdown = "📝",
+    web = "🌐"
+  }
+
   local entries = {}
   for _, book in ipairs(books) do
     local progress = math.floor((book.chapter / book.total_chapters) * 100)
     local last_opened = library.format_last_opened(book.last_opened)
     local author = book.author or "Unknown"
     local tag = book.tag or ""
-    local title_str = fit_string(book.title, 30)
+    local format = book.format or "epub"
+    local icon = format_icons[format] or "📄"
+
+    local title_str = fit_string(book.title, 28)
     local author_str = fit_string(author, 20)
     local tag_str = fit_string(tag, 15)
     local progress_str = string.format("%3d%%", progress)
 
     table.insert(entries, {
-      display = string.format("%s │ %s │ %s │ %s │ %s", title_str, author_str, tag_str, progress_str, last_opened),
+      display = string.format("%s %s │ %s │ %s │ %s │ %s", icon, title_str, author_str, tag_str, progress_str, last_opened),
       ordinal = book.title .. " " .. author .. " " .. tag,
       book = book,
       progress = progress,
@@ -75,7 +85,15 @@ function M.show_library_telescope(books)
       title = "Book Info",
       define_preview = function(self, entry)
         local book = entry.book
-        local lines = { "Title: " .. book.title, "Author: " .. (book.author or "Unknown") }
+        local format_icons = { epub = "📚", markdown = "📝", web = "🌐" }
+        local format = book.format or "epub"
+        local icon = format_icons[format] or "📄"
+
+        local lines = {
+          "Title: " .. book.title,
+          "Author: " .. (book.author or "Unknown"),
+          "Format: " .. icon .. " " .. (format:upper())
+        }
         if book.language then table.insert(lines, "Language: " .. book.language) end
         if book.date then table.insert(lines, "Date: " .. book.date) end
         table.insert(lines, "")
@@ -180,21 +198,31 @@ function M.show_library_telescope(books)
 end
 
 function M.show_library_floating(books)
+  -- Format icons
+  local format_icons = {
+    epub = "📚",
+    markdown = "📝",
+    web = "🌐"
+  }
+
   local lines = {}
   local book_map = {}
   table.insert(lines, "Library (press Enter to open, t to tag, d to delete, q to close)")
-  table.insert(lines, string.rep("─", 95))
+  table.insert(lines, string.rep("─", 100))
   for i, book in ipairs(books) do
     local progress = math.floor((book.chapter / book.total_chapters) * 100)
     local last_opened = library.format_last_opened(book.last_opened)
     local author = book.author or "Unknown"
     local tag = book.tag or ""
-    local title_str = fit_string(book.title, 30)
+    local format = book.format or "epub"
+    local icon = format_icons[format] or "📄"
+
+    local title_str = fit_string(book.title, 28)
     local author_str = fit_string(author, 20)
     local tag_str = fit_string(tag, 15)
     local progress_str = string.format("%3d%%", progress)
 
-    local line = string.format(" %s │ %s │ %s │ %s │ %s", title_str, author_str, tag_str, progress_str, last_opened)
+    local line = string.format(" %s %s │ %s │ %s │ %s │ %s", icon, title_str, author_str, tag_str, progress_str, last_opened)
     table.insert(lines, line)
     book_map[#lines] = book
   end
@@ -267,11 +295,28 @@ function M.show_library_floating(books)
   vim.api.nvim_win_set_cursor(win, {3, 0})
 end
 
+
 function M.show_library()
   local books = library.get_books()
   if #books == 0 then vim.notify("Library is empty. Open a book with :InkOpen first.", vim.log.levels.INFO); return end
   local ok_telescope, _ = pcall(require, 'telescope')
   if ok_telescope then M.show_library_telescope(books) else M.show_library_floating(books) end
+end
+
+-- Show library filtered by format
+-- @param format: string - "epub", "markdown", or "web"
+function M.show_library_by_format(format)
+  local books = library.get_books_by_format(format)
+  if #books == 0 then
+    vim.notify(string.format("No %s resources in library", format), vim.log.levels.INFO)
+    return
+  end
+  local ok_telescope, _ = pcall(require, 'telescope')
+  if ok_telescope then
+    M.show_library_telescope(books)
+  else
+    M.show_library_floating(books)
+  end
 end
 
 return M

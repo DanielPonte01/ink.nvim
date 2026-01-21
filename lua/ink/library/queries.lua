@@ -110,4 +110,60 @@ function M.get_last_book_path()
 	return library.last_book_path
 end
 
+-- Get books by format
+-- @param format: string - Format to filter ("epub", "markdown", "web")
+-- @return books: table[]
+function M.get_books_by_format(format)
+	local library = data.load()
+
+	-- Apply migration if needed
+	library = migration.migrate(library, data.save)
+
+	local filtered = {}
+
+	for _, book in ipairs(library.books) do
+		if book.format == format then
+			table.insert(filtered, book)
+		end
+	end
+
+	-- Sort by last_opened (most recent first)
+	table.sort(filtered, function(a, b)
+		return (a.last_opened or 0) > (b.last_opened or 0)
+	end)
+
+	return filtered
+end
+
+-- Get books grouped by format
+-- @return grouped: table - {epub = {...}, markdown = {...}, web = {...}}
+function M.get_books_grouped_by_format()
+	local library = data.load()
+
+	-- Apply migration if needed
+	library = migration.migrate(library, data.save)
+
+	local grouped = {
+		epub = {},
+		markdown = {},
+		web = {}
+	}
+
+	for _, book in ipairs(library.books) do
+		local format = book.format or "epub"
+		if grouped[format] then
+			table.insert(grouped[format], book)
+		end
+	end
+
+	-- Sort each group by last_opened (most recent first)
+	for _, books in pairs(grouped) do
+		table.sort(books, function(a, b)
+			return (a.last_opened or 0) > (b.last_opened or 0)
+		end)
+	end
+
+	return grouped
+end
+
 return M

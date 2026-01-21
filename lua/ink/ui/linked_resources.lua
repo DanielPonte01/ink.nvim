@@ -48,21 +48,53 @@ function M.show_related_resources()
 	-- Get full book info for each related slug
 	local books = library.get_books()
 	local related_books = {}
+	local broken_references = {}
 
 	for _, slug in ipairs(related_slugs) do
+		local found = false
 		for _, book in ipairs(books) do
 			if book.slug == slug then
 				table.insert(related_books, book)
+				found = true
 				break
 			end
 		end
+
+		-- Track broken references (slug exists in related.json but not in library.json)
+		if not found then
+			table.insert(broken_references, slug)
+		end
 	end
 
-	M.show_related_telescope(related_books)
+	-- Notify user about broken references
+	if #broken_references > 0 then
+		local broken_list = table.concat(broken_references, ", ")
+		if #broken_references == 1 then
+			vim.notify(
+				string.format("Warning: 1 broken reference found ('%s'). Book was deleted from library.", broken_list),
+				vim.log.levels.WARN
+			)
+		else
+			vim.notify(
+				string.format("Warning: %d broken references found (%s). Books were deleted from library.",
+					#broken_references, broken_list),
+				vim.log.levels.WARN
+			)
+		end
+		vim.notify("Run :InkHealth to clean up orphan references", vim.log.levels.INFO)
+	end
+
+	-- Show available related books
+	if #related_books == 0 then
+		vim.notify("All related resources have been deleted from library", vim.log.levels.WARN)
+		return
+	end
+
+	M.show_related_telescope(related_books, book_slug)
 end
 
 -- Show related books in telescope picker (same format as library)
-function M.show_related_telescope(related_books)
+function M.show_related_telescope(related_books, current_book_slug)
 	local pickers = require('telescope.pickers')
 	local finders = require('telescope.finders')
 	local conf = require('telescope.config')
@@ -70,19 +102,29 @@ function M.show_related_telescope(related_books)
 	local action_state = require('telescope.actions.state')
 	local previewers = require('telescope.previewers')
 
+	-- Format icons
+	local format_icons = {
+		epub = "📚",
+		markdown = "📝",
+		web = "🌐"
+	}
+
 	local entries = {}
 	for _, book in ipairs(related_books) do
 		local progress = math.floor((book.chapter / book.total_chapters) * 100)
 		local last_opened = library.format_last_opened(book.last_opened)
 		local author = book.author or "Unknown"
 		local tag = book.tag or ""
-		local title_str = fit_string(book.title, 30)
+		local format = book.format or "epub"
+		local icon = format_icons[format] or "📄"
+
+		local title_str = fit_string(book.title, 28)
 		local author_str = fit_string(author, 20)
 		local tag_str = fit_string(tag, 15)
 		local progress_str = string.format("%3d%%", progress)
 
 		table.insert(entries, {
-			display = string.format("%s │ %s │ %s │ %s │ %s", title_str, author_str, tag_str, progress_str, last_opened),
+			display = string.format("%s %s │ %s │ %s │ %s │ %s", icon, title_str, author_str, tag_str, progress_str, last_opened),
 			ordinal = book.title .. " " .. author .. " " .. tag,
 			book = book,
 			progress = progress,
@@ -92,7 +134,7 @@ function M.show_related_telescope(related_books)
 	end
 
 	pickers.new({}, {
-		prompt_title = "Related Resources (Enter: open)",
+		prompt_title = "Related Resources (Enter: open | Ctrl-d: remove)",
 		finder = finders.new_table({
 			results = entries,
 			entry_maker = function(entry)
@@ -103,7 +145,15 @@ function M.show_related_telescope(related_books)
 			title = "Book Info",
 			define_preview = function(self, entry)
 				local book = entry.book
-				local lines = { "Title: " .. book.title, "Author: " .. (book.author or "Unknown") }
+				local format_icons = { epub = "📚", markdown = "📝", web = "🌐" }
+				local format = book.format or "epub"
+				local icon = format_icons[format] or "📄"
+
+				local lines = {
+					"Title: " .. book.title,
+					"Author: " .. (book.author or "Unknown"),
+					"Format: " .. icon .. " " .. (format:upper())
+				}
 				if book.language then table.insert(lines, "Language: " .. book.language) end
 				if book.date then table.insert(lines, "Date: " .. book.date) end
 				table.insert(lines, "")
@@ -133,6 +183,42 @@ function M.show_related_telescope(related_books)
 				local book = selection.book
 				M.open_related_book(book)
 			end)
+
+			-- Add delete mapping
+			map('i', '<C-d>', function()
+				local selection = action_state.get_selected_entry()
+				if not selection then return end
+
+				local book = selection.book
+				local success = related.remove_related(current_book_slug, book.slug)
+
+				if success then
+					vim.notify("Removed related resource: " .. book.title, vim.log.levels.INFO)
+					-- Refresh the picker with updated list
+					actions.close(prompt_bufnr)
+					M.show_related_resources()
+				else
+					vim.notify("Failed to remove related resource", vim.log.levels.ERROR)
+				end
+			end)
+
+			map('n', '<C-d>', function()
+				local selection = action_state.get_selected_entry()
+				if not selection then return end
+
+				local book = selection.book
+				local success = related.remove_related(current_book_slug, book.slug)
+
+				if success then
+					vim.notify("Removed related resource: " .. book.title, vim.log.levels.INFO)
+					-- Refresh the picker with updated list
+					actions.close(prompt_bufnr)
+					M.show_related_resources()
+				else
+					vim.notify("Failed to remove related resource", vim.log.levels.ERROR)
+				end
+			end)
+
 			return true
 		end,
 	}):find()
@@ -143,7 +229,14 @@ function M.open_related_book(book)
 	local ui = require("ink.ui")
 	local ok, data = library.open_book(book.path, book.format)
 	if ok then
-		ui.open_book(data, { in_new_tab = true })
+		-- Get configuration for related resources opening
+		local config = require("ink.ui.context").config
+		local related_config = config.related_resources or {}
+		local position = related_config.position or "right"
+		local show_toc = related_config.show_toc
+		if show_toc == nil then show_toc = false end
+
+		ui.open_book(data, { position = position, show_toc = show_toc })
 	else
 		vim.notify("Failed to open related book: " .. book.title .. " (" .. tostring(data) .. ")", vim.log.levels.ERROR)
 	end
@@ -175,19 +268,29 @@ function M.add_related_resource()
 	local action_state = require('telescope.actions.state')
 	local previewers = require('telescope.previewers')
 
+	-- Format icons
+	local format_icons = {
+		epub = "📚",
+		markdown = "📝",
+		web = "🌐"
+	}
+
 	local entries = {}
 	for _, book in ipairs(other_books) do
 		local progress = math.floor((book.chapter / book.total_chapters) * 100)
 		local last_opened = library.format_last_opened(book.last_opened)
 		local author = book.author or "Unknown"
 		local tag = book.tag or ""
-		local title_str = fit_string(book.title, 30)
+		local format = book.format or "epub"
+		local icon = format_icons[format] or "📄"
+
+		local title_str = fit_string(book.title, 28)
 		local author_str = fit_string(author, 20)
 		local tag_str = fit_string(tag, 15)
 		local progress_str = string.format("%3d%%", progress)
 
 		table.insert(entries, {
-			display = string.format("%s │ %s │ %s │ %s │ %s", title_str, author_str, tag_str, progress_str, last_opened),
+			display = string.format("%s %s │ %s │ %s │ %s │ %s", icon, title_str, author_str, tag_str, progress_str, last_opened),
 			ordinal = book.title .. " " .. author .. " " .. tag,
 			book = book,
 			progress = progress,
@@ -208,7 +311,15 @@ function M.add_related_resource()
 			title = "Book Info",
 			define_preview = function(self, entry)
 				local book = entry.book
-				local lines = { "Title: " .. book.title, "Author: " .. (book.author or "Unknown") }
+				local format_icons = { epub = "📚", markdown = "📝", web = "🌐" }
+				local format = book.format or "epub"
+				local icon = format_icons[format] or "📄"
+
+				local lines = {
+					"Title: " .. book.title,
+					"Author: " .. (book.author or "Unknown"),
+					"Format: " .. icon .. " " .. (format:upper())
+				}
 				if book.language then table.insert(lines, "Language: " .. book.language) end
 				if book.date then table.insert(lines, "Date: " .. book.date) end
 				table.insert(lines, "")

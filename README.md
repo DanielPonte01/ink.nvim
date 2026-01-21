@@ -1,95 +1,84 @@
 # ink.nvim
 
-> A minimalist, distraction-free EPUB and Markdown reader for Neovim.
-
-Read books and documents without leaving your editor. Full support for EPUB files and Markdown documents with persistent highlights, notes, bookmarks, glossary system, and powerful search capabilities.
-
-**Non-destructive**: All annotations (highlights, notes, bookmarks, glossary) are stored separately and never modify your original files.
+A minimalist EPUB, Markdown, and web reader for Neovim with powerful annotation and organization features.
 
 **Quick Start:**
 ```vim
-:InkOpen book.epub          " Open EPUB
-:InkOpen document.md        " Open Markdown
-:InkLibrary                 " Browse your library
-:InkDashboard               " View reading statistics
+:InkOpen book.epub
+:InkOpen document.md
+:InkOpen https://example.com/article
+:InkLibrary
 ```
 
 ## Features
 
-### Reading
-- **Multiple formats**: EPUB (.epub) and Markdown (.md) files
-- **Continuous scrolling** per chapter with table of contents navigation
-- **Smart caching**: EPUBs extracted once, automatically invalidated on file changes
-- **Syntax highlighting** for code blocks and formatted text
-- **Text justification** (optional, toggle on/off)
-- **Adaptive width**: Automatically adjusts text width based on window size (manual override supported)
-- **Progress tracking** with automatic session restoration
+**Reading**
+- Multiple formats: EPUB, Markdown, web pages
+- Smart caching with automatic invalidation
+- Adaptive text width based on window size
+- Continuous scrolling with TOC navigation
+- Customizable typography (line/paragraph spacing, justification)
+- Syntax highlighting for code blocks
 
-### Annotations
-- **Highlights** with customizable colors (yellow, green, red, blue by default)
-- **Change highlight colors** without recreating (preserves notes)
-- **Notes on highlights** with timestamps and multiple display modes
-- **Bookmarks** with custom names (multiple per paragraph)
-- **Glossary system** with terms, definitions, aliases, and relationships
-- **Parallel notes (padnotes)**: Chapter-specific markdown files with auto-save
+**Annotations**
+- Highlights with customizable colors
+- Notes on highlights with multiple display modes (off/indicator/margin/expanded)
+- Bookmarks with custom names (multiple per paragraph)
+- Glossary system with term types, relationships, and graph visualization
+- Padnotes: chapter-specific markdown files with auto-save
 
-### Organization
-- **Library management**: Browse, search, and track reading progress
-- **Collections**: Organize books into themed groups
-- **Dashboard**: Minimalist interface showing library and statistics
-- **Reading sessions**: Track time spent reading with detailed statistics
-- **Status tracking**: Auto-categorize books (to-read, reading, completed)
-- **Related Resources**: Connect books with reciprocal relations (other books)
+**Organization**
+- Library with collections and search
+- Reading session tracking with statistics and streaks
+- Dashboard with progress visualization
+- Related resources: link books together with reciprocal relations
+- Auto-categorization (to-read, reading, completed)
 
-### Navigation & Search
-- **Telescope integration** for searching chapters and content
-- **Internal links**: Navigate between sections with preview or jump
-- **External links**: Open URLs in browser with confirmation
-- **Footnote preview**: Floating windows for footnotes and anchors
-- **Full-text search**: Live grep across all chapters
+**Navigation & Search**
+- Telescope integration for chapters and full-text search
+- Internal links with preview or direct jump
+- Footnote floating windows
+- External links with confirmation
 
-### Export & Sharing
-- **Export to Markdown or JSON**: Highlights, notes, bookmarks, and glossary
-- **Context inclusion**: Optional surrounding text for highlights
-- **Glossary export**: Include terms and relationships
-- **Timestamped filenames**: Organized export history
+**Export**
+- Export to Markdown or JSON
+- Includes highlights, notes, bookmarks, and glossary
+- Optional context and relationships
+- Timestamped filenames
 
-### Advanced
-- **Image extraction** and external viewing
-- **TOC rebuild**: Generate table of contents from headings
-- **Relationship graphs**: Visualize glossary term connections (ASCII/HTML)
-- **Cache management**: Interactive UI for cleaning up cached files
+**Advanced**
+- Image extraction and viewing
+- TOC rebuild from headings
+- Relationship graphs (ASCII/HTML)
+- Cache management UI
+- Web page version tracking and updates
 
 ## Requirements
 
 - Neovim 0.7+
-- `unzip` command (for extracting EPUB files)
-- [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim) (optional, for search and library features)
+- `unzip` (for EPUB files)
+- [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim) (optional, for search features)
 
 ## Installation
 
-### Using [lazy.nvim](https://github.com/folke/lazy.nvim)
+**Using [lazy.nvim](https://github.com/folke/lazy.nvim)**
 
 ```lua
 {
   "DanielPonte01/ink.nvim",
-  dependencies = {
-    "nvim-telescope/telescope.nvim",  -- Optional: for search features
-  },
+  dependencies = { "nvim-telescope/telescope.nvim" },
   config = function()
     require("ink").setup()
   end
 }
 ```
 
-### Using [packer.nvim](https://github.com/wbthomason/packer.nvim)
+**Using [packer.nvim](https://github.com/wbthomason/packer.nvim)**
 
 ```lua
 use {
   "DanielPonte01/ink.nvim",
-  requires = {
-    "nvim-telescope/telescope.nvim",  -- Optional: for search features
-  },
+  requires = { "nvim-telescope/telescope.nvim" },
   config = function()
     require("ink").setup()
   end
@@ -98,118 +87,179 @@ use {
 
 ## Configuration
 
-Default configuration with all available options:
+Default configuration (all options commented in code):
 
 ```lua
 require("ink").setup({
-  focused_mode = true,
-  image_open = true,
-  justify_text = false,
-  max_width = 120,
-  width_step = 10,
-  adaptive_width = true,              -- Automatically adjust text width based on window size
-  adaptive_width_margin = 0.8,        -- Use 80% of window width (0.1 to 1.0, maintains 10% margin on each side)
+    -- Display settings
+    focused_mode = true,           -- Hide distractions (statusline, etc.) when reading
+    image_open = true,             -- Allow opening images in external viewer
+    justify_text = false,          -- Enable text justification (adds spaces between words, affects copying)
+    max_width = 120,               -- Maximum text width in columns
+    width_step = 10,               -- Width change amount per keypress (+/-)
+    adaptive_width = true,         -- Auto-adjust width based on window size
+    adaptive_width_margin = 0.8,   -- Use 80% of window width (0.1-1.0, maintains margins on sides)
 
-  -- All keymaps are customizable
-  keymaps = {
-    next_chapter = "]c",
-    prev_chapter = "[c",
-    toggle_toc = "<leader>t",
-    activate = "<CR>",              -- Preview/open: footnote, link, image, TOC
-    jump_to_link = "g<CR>",
-    search_toc = "<leader>pit",
-    search_content = "<leader>pif",
-    search_mode_toggle = "<C-f>",
-    width_increase = "<leader>+",
-    width_decrease = "<leader>-",
-    width_reset = "<leader>=",
-    toggle_justify = "<leader>jt",
-    library = "<leader>eL",
-    last_book = "<leader>el",
-    dashboard = "<leader>ed",
-  },
+    -- Navigation and interaction keymaps
+    keymaps = {
+        next_chapter = "]c",
+        prev_chapter = "[c",
+        toggle_toc = "<leader>t",
+        toggle_floating_toc = "<leader>T", -- Experimental floating TOC
+        activate = "<CR>",                  -- Preview/open footnote, link, image, or TOC item
+        jump_to_link = "g<CR>",             -- Jump directly to link target
+        search_toc = "<leader>pit",
+        search_content = "<leader>pif",
+        search_mode_toggle = "<C-f>",       -- Switch between TOC and content search in Telescope
+        width_increase = "<leader>+",
+        width_decrease = "<leader>-",
+        width_reset = "<leader>=",          -- Reset to adaptive width
+        toggle_justify = "<leader>jt",
+        library = "<leader>eL",
+        last_book = "<leader>el",
+        dashboard = "<leader>ed",
+        related_resources = "<leader>er",   -- List related books
+    }
+    -- Highlight colors (add custom colors: purple, orange, pink, etc.)
+    highlight_colors = {
+        yellow = { bg = "#E8C89F", fg = "#000000" },
+        green = { bg = "#8BB894", fg = "#000000" },
+        red = { bg = "#D97B73", fg = "#000000" },
+        blue = { bg = "#7BA3D0", fg = "#000000" },
+       -- purple = { bg = "#5A3B7A", fg = "#000000" }, -- Custom Color
+        none = { bg = "NONE", fg = "NONE" },
+    },
 
-  highlight_colors = {
-    yellow = { bg = "#f9e2af", fg = "#000000" },
-    green = { bg = "#a6e3a1", fg = "#000000" },
-    red = { bg = "#f38ba8", fg = "#000000" },
-    blue = { bg = "#89b4fa", fg = "#000000" },
-    -- Add custom colors: purple, orange, pink, etc.
-  },
+    -- Highlight keymaps (in visual mode)
+    highlight_keymaps = {
+        yellow = "<leader>hy",
+        green = "<leader>hg",
+        red = "<leader>hr",
+        blue = "<leader>hb",
+        remove = "<leader>hd",
+       -- purple = "<leader>hp", -- Custom Color
 
-  highlight_keymaps = {
-    yellow = "<leader>hy",
-    green = "<leader>hg",
-    red = "<leader>hr",
-    blue = "<leader>hb",
-    remove = "<leader>hd"
-  },
+    },
 
-  highlight_change_color_keymaps = {
-    yellow = "<leader>hcy",
-    green = "<leader>hcg",
-    red = "<leader>hcr",
-    blue = "<leader>hcb"
-  },
+    -- Change highlight color (preserves notes)
+    highlight_change_color_keymaps = {
+        yellow = "<leader>hcy",
+        green = "<leader>hcg",
+        red = "<leader>hcr",
+        blue = "<leader>hcb",
+     --   purple = "<leader>hcp", -- Custom Color
 
-  note_keymaps = {
-    add = "<leader>na",
-    remove = "<leader>nd",
-    toggle_display = "<leader>nt"
-  },
+    },
 
-  bookmark_keymaps = {
-    add = "<leader>ba",
-    edit = "<leader>be",
-    remove = "<leader>bd",
-    next = "<leader>bn",
-    prev = "<leader>bp",
-    list_all = "<leader>bl",
-    list_book = "<leader>bb",
-  },
-  bookmark_icon = "📑",
+    -- Notes keymaps
+    note_keymaps = {
+        add = "<leader>na",           -- Add/edit note on highlight
+        remove = "<leader>nd",
+        toggle_display = "<leader>nt", -- Cycle: off → indicator → margin → expanded
+    },
+    note_display_mode = "margin",      -- Default display mode: "off" | "indicator" | "margin" | "expanded"
+    margin_note_width = 35,            -- Max width of margin notes (chars)
+    margin_min_space = 30,             -- Min margin space required for margin mode (chars)
+    notes_list_keymaps = {
+        list_all = "<leader>nla",      -- List notes from all books
+        list_book = "<leader>nlb",
+    },
 
-  export_keymaps = {
-    current_book = "<leader>ex",
-  },
+    -- Bookmarks keymaps
+    bookmark_keymaps = {
+        add = "<leader>ba",
+        edit = "<leader>be",
+        remove = "<leader>bd",
+        next = "<leader>bn",           -- Navigate across chapters
+        prev = "<leader>bp",
+        list_all = "<leader>bl",       -- Global bookmarks list
+        list_book = "<leader>bb",      -- Current book bookmarks
+    },
+    bookmark_icon = "📑",
 
-  export_defaults = {
-    format = "markdown",              -- "markdown" | "json"
-    include_bookmarks = false,
-    include_context = false,
-    include_glossary = false,
-    export_dir = "~/Documents",
-  },
+    -- Export keymaps
+    export_keymaps = {
+        current_book = "<leader>ex",
+    },
+    export_defaults = {
+        format = "markdown",       -- "markdown" | "json"
+        include_bookmarks = false, -- Include bookmarks in export
+        include_context = false,   -- Include surrounding text for highlights
+        include_glossary = false,  -- Include glossary terms and relationships
+        export_dir = "~/Documents",
+    },
 
-  glossary_visible = true,
-  glossary_keymaps = {
-    add = "<leader>ga",
-    edit = "<leader>ge",
-    remove = "<leader>gd",
-    preview = "<leader>gp",
-    browser = "<leader>gl",
-    show_related = "<leader>gg",
-    show_graph = "<leader>gG",
-    toggle_display = "<leader>gt",
-  },
+    -- Typography settings
+    typography = {
+        line_spacing = 1,      -- Lines between text lines (1 = normal, 2 = double space)
+        paragraph_spacing = 1, -- Lines between paragraphs
+        indent_size = 4,       -- Indent for blockquotes, code blocks, definitions
+        list_indent = 2,       -- Indent for nested lists
+    },
+    typography_keymaps = {
+        line_spacing_increase = "<leader>l+",
+        line_spacing_decrease = "<leader>l-",
+        line_spacing_reset = "<leader>l=",
+        paragraph_spacing_increase = "<leader>p+",
+        paragraph_spacing_decrease = "<leader>p-",
+        paragraph_spacing_reset = "<leader>p=",
+    },
 
-  padnotes = {
-    enabled = true,
-    auto_save_interval = 120,         -- Auto-save every 2 minutes
-    position = "right",                -- "right" | "left" | "top" | "bottom"
-    size = 0.5,                        -- < 1 for percentage (0.5 = 50%), >= 1 for absolute (80 = 80 cols)
-  },
+    -- Reading session tracking
+    tracking = {
+        enabled = true,           -- Track reading time and sessions
+        auto_save_interval = 300, -- Save interval in seconds (5 min)
+        cleanup_after_days = 365, -- Clean old sessions (0 = never)
+        grace_period = 1,         -- Days of grace for streak continuation
+    },
 
-  padnotes_keymaps = {
-    toggle = "<leader>pa",
-    open = "<leader>po",
-    close = "<leader>pc",
-    list_all = "<leader>pl",
-  },
+    -- Glossary term types (customize icons and colors)
+    glossary_types = {
+        character = { icon = "👤", color = "InkGlossaryCharacter" },
+        place = { icon = "📍", color = "InkGlossaryPlace" },
+        concept = { icon = "💡", color = "InkGlossaryConcept" },
+        organization = { icon = "🏛️", color = "InkGlossaryOrg" },
+        object = { icon = "⚔️", color = "InkGlossaryObject" },
+        event = { icon = "⚡", color = "InkGlossaryEvent" },
+        foreign_word = { icon = "🌐", color = "InkGlossaryForeign" },
+        other = { icon = "📝", color = "InkGlossary" }
+    },
+    glossary_visible = true, -- Show glossary terms underlined in text
+    glossary_keymaps = {
+        add = "<leader>ga",
+        edit = "<leader>ge",
+        remove = "<leader>gd",
+        preview = "<leader>gp",        -- Show definition in floating window
+        browser = "<leader>gl",        -- Browse all entries with Telescope
+        show_related = "<leader>gg",   -- Show related terms (relationships)
+        show_graph = "<leader>gG",     -- Visualize term relationships (ASCII/HTML)
+        toggle_display = "<leader>gt", -- Toggle term underlining on/off
+    },
 
-  dashboard_keymaps = {
-    open = "<leader>ed",
-  },
+    -- TOC configuration
+    force_content_toc = false, -- Build TOC from content headings instead of EPUB metadata
+
+    -- Padnotes configuration (chapter-specific markdown notes)
+    padnotes = {
+        enabled = true,
+        path = "default",         -- "default" or custom with {slug}, {author}, {title} placeholders
+        auto_save_interval = 120, -- Auto-save interval in seconds
+        template = "default",     -- Custom template (future feature)
+        position = "right",       -- "right" | "left" | "top" | "bottom"
+        size = 0.5,               -- < 1: percentage (0.5 = 50%), >= 1: absolute columns/lines
+    },
+    padnotes_keymaps = {
+        toggle = "<leader>pa",   -- Smart toggle: create/open/close/switch chapters
+        open = "<leader>po",
+        close = "<leader>pc",
+        list_all = "<leader>pl", -- Browse all padnotes with Telescope
+    },
+
+    -- Related resources (link books together)
+    related_resources = {
+        position = "right", -- Where to open related book
+        show_toc = false,   -- Show TOC when opening (false to avoid clutter)
+    },
 })
 ```
 
@@ -217,178 +267,138 @@ require("ink").setup({
 
 ### Commands
 
-**Book Management:**
-- `:InkOpen <path>` - Open EPUB or Markdown file
-- `:InkLibrary` - Browse library with search and filters
-- `:InkLast` - Reopen last read book at saved position
-- `:InkAddLibrary [dir]` - Scan directory for EPUBs (async)
-- `:InkEditLibrary` - Edit library.json manually
-- `:InkDashboard [type]` - Open dashboard (library or stats)
+**Book Management**
+```vim
+:InkOpen <path>           " Open EPUB/Markdown/URL
+:InkLibrary               " Browse library
+:InkLast                  " Reopen last book
+:InkAddLibrary [dir]      " Scan directory for EPUBs
+:InkDashboard [type]      " Open dashboard (library/stats)
+```
 
-**Annotations:**
-- `:InkBookmarks` - Browse all bookmarks globally
-- `:InkBookmarksBook` - Browse bookmarks in current book
-- `:InkExport` - Export highlights, notes, bookmarks, glossary
-- `:InkRebuildTOC` - Rebuild table of contents from headings
+**Annotations**
+```vim
+:InkBookmarks             " Browse all bookmarks
+:InkBookmarksBook         " Browse current book bookmarks
+:InkNotes                 " List all notes
+:InkNotesBook             " List current book notes
+:InkExport                " Export annotations
+```
 
-**Cache Management:**
-- `:InkClearCache` - Interactive cache management UI
-- `:InkClearCache --all` - Clear all cache (with confirmation)
-- `:InkClearCache <slug>` - Clear specific book cache
-- `:InkCacheInfo` - Show cache statistics
+**Glossary**
+```vim
+:InkGlossary              " Browse glossary with Telescope
+:InkGlossaryAdd [term]    " Add entry
+:InkGlossaryGraph         " Visualize relationships
+```
 
-See the [default configuration](#configuration) above for all keymaps and options.
+**Related Resources**
+```vim
+:InkAddRelated            " Link related book
+:InkListRelated           " Show related books (Ctrl-d to remove)
+:InkCleanupRelated        " Clean orphan references
+```
 
-### Features in Detail
+**Cache**
+```vim
+:InkClearCache            " Interactive cache UI
+:InkClearCache --all      " Clear all cache
+:InkClearCache <slug>     " Clear specific book
+:InkCacheInfo             " Show cache stats
+```
 
-#### Highlights & Notes
-1. Select text in visual mode
-2. Press `<leader>hy` (or hg/hr/hb) to highlight
-3. Press `<leader>na` to add a note on the highlight
-4. Change color with `<leader>hcy` (preserves notes)
-5. Toggle display modes: off, indicator (•), expanded
+**Web-Specific**
+```vim
+:InkWebToggleVersion      " Switch between versions
+:InkWebChangelog          " Show version changelog
+:InkWebCheckUpdates       " Check for updates
+:InkWebUpdateSafe         " Update with backup
+```
 
-#### Adaptive Width
-Text width automatically adapts to your window size for optimal reading comfort:
+**Other**
+```vim
+:InkRebuildTOC            " Rebuild TOC from content
+:InkHealth                " Run diagnostics
+:InkResetStats            " Reset reading statistics
+```
 
-- **Automatic adjustment**: When enabled (default), text width uses 80% of window width
-- **Window resize**: Text reflows when you open/close TOC, padnotes, or resize windows
-- **Per-book isolation**: Each book/tab maintains independent width settings
-- **Manual override**: Adjust width manually with `<leader>+` and `<leader>-`
-  - Disables adaptive width with notification: "Width: 90 (adaptive disabled)"
-  - Prevents automatic adjustments until reset
-- **Reset adaptive**: Press `<leader>=` to restore adaptive behavior
-  - Notification: "Width reset: 72 (adaptive enabled)"
-  - Recalculates width based on current window size
+### Key Features
 
-#### Bookmarks
-- Add multiple bookmarks per paragraph with `<leader>ba`
-- Navigate with `<leader>bn` and `<leader>bp` across chapters
-- Edit or remove with `<leader>be` and `<leader>bd`
-- Visual indicator shows bookmark names above paragraphs
+**Highlights & Notes**
+- Select text in visual mode, press `<leader>hy` (yellow/green/red/blue)
+- Add notes with `<leader>na`
+- Change color with `<leader>hcy` (preserves notes)
+- Toggle display: `<leader>nt` (off → indicator → margin → expanded)
 
-#### Glossary
-- Add terms with `<leader>ga` on any word
+**Adaptive Width**
+- Auto-adjusts to window size (80% by default)
+- Manual adjust: `<leader>+` / `<leader>-` (disables adaptive)
+- Reset: `<leader>=` (re-enables adaptive)
+
+**Bookmarks**
+- Add: `<leader>ba`, navigate: `<leader>bn` / `<leader>bp`
+- Multiple bookmarks per paragraph supported
+
+**Glossary**
+- Add terms: `<leader>ga`, preview: `<leader>gp`
 - Auto-detection underlines terms in text
-- Preview definitions with `<leader>gp`
 - Define relationships: see_also, contrast, broader, narrower
-- Visualize with ASCII or HTML graphs (`<leader>gG`)
+- Visualize: `<leader>gG` (ASCII/HTML graph)
 
-#### Parallel Notes (Padnotes)
-- `<leader>pa` - Smart toggle (create/open/close/switch chapters)
-- One markdown file per chapter with auto-save (2min interval)
-- `<leader>pl` - Browse all padnotes with preview
-- Configurable position (right/left/top/bottom) and size
-- Perfect for reading journals and study notes
+**Padnotes**
+- Smart toggle: `<leader>pa` (create/open/close/switch)
+- One markdown file per chapter with auto-save
+- Browse all: `<leader>pl`
 
-#### Collections & Dashboard
-- Organize books into themed collections
-- Dashboard shows library table with pagination (15 books/page)
-- Filter by collection, view statistics, manage collections
-- Track reading time, completion rates, and progress
+**Related Resources**
+- Link books together with reciprocal relations
+- Open in split (configurable position)
+- Manage via Telescope (Ctrl-d to remove)
 
-#### Export
+**Typography**
+- Adjust line spacing: `<leader>l+` / `<leader>l-`
+- Adjust paragraph spacing: `<leader>p+` / `<leader>p-`
+- Reset: `<leader>l=` / `<leader>p=`
+
+**Export**
 ```vim
 :InkExport md -bcg ~/exports/
 ```
-- Formats: `md` (Markdown) or `json`
-- Flags: `-b` (bookmarks), `-c` (context), `-g` (glossary)
-- Timestamped filenames: `book-title-2024-01-15.md`
+Formats: `md` (Markdown) or `json`. Flags: `-b` (bookmarks), `-c` (context), `-g` (glossary).
 
-#### Markdown Support
-- Full support for `.md` files with all EPUB features
-- Automatic chapter division by H1 headings (or H2 fallback)
-- Generated table of contents from heading structure
-- All features work: highlights, bookmarks, notes, glossary, search
+**Search**
+- TOC: `<leader>pit`, Content: `<leader>pif`
+- Toggle modes: `<C-f>` in Telescope
 
-### Links & Navigation
-
-**Internal Links (anchors, footnotes):**
-- `<CR>` - Preview in floating window or navigate to different chapter
-- `g<CR>` - Jump directly to target
-
-**External Links (URLs):**
-- `<CR>` or `g<CR>` - Confirmation dialog to open in browser
-
-### Search
-
-**Chapter Search (`<leader>pit`):**
-- Shows all chapters with previews
-- Type to filter by name
-- `<C-f>` to switch to content search
-
-**Content Search (`<leader>pif`):**
-- Live grep across all chapters
-- Results as you type
-- `<C-f>` to switch to chapter search
+**Links**
+- Internal: `<CR>` (preview), `g<CR>` (jump)
+- External: Opens in browser with confirmation
 
 ### Data Storage
 
-All plugin data stored in `~/.local/share/nvim/ink.nvim/`:
-
 ```
 ~/.local/share/nvim/ink.nvim/
-├── library.json              # Library metadata (all books)
-├── collections.json          # Book collections
-│
-├── cache/                    # ⚡ Temporary (safe to delete)
-│   └── {book-slug}/
-│       ├── epub/             # Extracted EPUB files
-│       ├── toc.json          # Generated TOC
-│       ├── css.json          # Parsed styles
-│       ├── search_index.json # Search index
-│       └── glossary_matches.json  # Term detection cache
-│
-└── books/                    # 💾 User data (permanent)
+├── library.json           # Library metadata
+├── related.json           # Related metadata
+├── collections.json       # Collections
+├── cache/                 # Temporary (safe to delete)
+│   └── {book-slug}/       # Extracted EPUB, TOC, indexes
+└── books/                 # User data (permanent)
     └── {book-slug}/
-        ├── state.json        # Reading position
-        ├── highlights.json   # Highlights and notes
-        ├── bookmarks.json    # Bookmarks
-        ├── glossary.json     # Terms and relationships
-        ├── padnotes/         # Chapter-specific notes
-        └── sessions.json     # Reading history
+        ├── state.json     # Reading position
+        ├── highlights.json
+        ├── bookmarks.json
+        ├── glossary.json
+        ├── padnotes/
+        └── sessions.json  # Reading history
 ```
 
 ## Testing
 
-A comprehensive test file (`ink-test.epub` and `ink-test.md`) demonstrates all features:
-
+Test files demonstrate all features:
 ```vim
 :InkOpen ink-test.epub
 :InkOpen ink-test.md
-```
-
-The test file includes examples of:
-- Text formatting and lists
-- Code blocks and blockquotes
-- Highlights, notes, and bookmarks
-- Glossary usage
-- Padnotes documentation
-- Collections and dashboard
-- Export functionality
- - Cache management
-
-## Related Resources
-
-Connect books with reciprocal relations for enhanced reading experiences:
-
-**Adding Relations:**
-- `:InkAddRelated` - Open telescope picker to select and relate books
-- Relations are bidirectional and stored in a separate `related.json` file
-
-**Viewing Relations:**
-- `:InkListRelated` - Show related books in telescope picker
-- `<leader>er` - Quick access to related resources (configurable)
-
-**Features:**
-- **Reciprocal Relations**: Relating A to B automatically relates B back to A
-- **Telescope Integration**: Smooth selection and navigation
-- **Isolated Storage**: Relations stored separately from library metadata
-
-Example usage:
-```vim
-:InkAddRelated
-:InkListRelated
 ```
 
 ## Author
@@ -397,4 +407,4 @@ Created by [DanielPonte01](https://github.com/DanielPonte01)
 
 ## License
 
-GPL-3.0 - See [LICENSE](LICENSE) for details.
+GPL-3.0

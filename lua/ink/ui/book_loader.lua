@@ -503,7 +503,16 @@ function M.setup_book_autocmds(content_buf, slug)
 end
 
 -- Main function to open a book
-function M.open_book(book_data)
+-- @param book_data: book data structure
+-- @param opts: optional table with:
+--   - position: "right" | "left" | "top" | "bottom" (default: opens in current window or new tab)
+--   - show_toc: boolean (default: true)
+function M.open_book(book_data, opts)
+  opts = opts or {}
+  local position = opts.position
+  local show_toc = opts.show_toc
+  if show_toc == nil then show_toc = true end
+
   -- Register book in library
   library.add_book({
     slug = book_data.slug,
@@ -531,16 +540,29 @@ function M.open_book(book_data)
   -- Flag to prevent state saving during book initialization
   ctx._is_initializing = true
 
-  -- Create new tab only if current buffer is not empty
-  if not utils.is_current_buffer_empty() then
-    vim.cmd("tabnew")
+  -- Open book in specified position
+  if position == "right" then
+    vim.cmd("rightbelow vsplit")
+  elseif position == "left" then
+    vim.cmd("leftabove vsplit")
+  elseif position == "top" then
+    vim.cmd("leftabove split")
+  elseif position == "bottom" then
+    vim.cmd("rightbelow split")
+  else
+    -- No position specified: create new tab only if current buffer is not empty
+    if not utils.is_current_buffer_empty() then
+      vim.cmd("tabnew")
+    end
   end
   ctx.content_win = vim.api.nvim_get_current_win()
   vim.api.nvim_win_set_buf(ctx.content_win, content_buf)
 
-  -- Render TOC and toggle it open
-  render.render_toc(ctx)
-  render.toggle_toc(ctx)
+  -- Render TOC and toggle it open only if show_toc is true
+  if show_toc then
+    render.render_toc(ctx)
+    render.toggle_toc(ctx)
+  end
 
   -- Schedule chapter rendering to ensure window has been resized after TOC toggle
   -- This prevents glossary marks from being calculated with incorrect window width
