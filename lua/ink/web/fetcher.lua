@@ -76,25 +76,55 @@ local function save_metadata(slug, metadata)
   return true
 end
 
+-- Convert ISO-8859-1 bytes to UTF-8 using iconv
+-- Security: Avoids shell injection by using direct process execution
+local function convert_encoding(content, from_encoding, to_encoding)
+  if not content or #content == 0 then
+    return content
+  end
+
+  -- Use vim.system with direct arguments (no shell interpolation)
+  local result = vim.system(
+    {"iconv", "-f", from_encoding, "-t", to_encoding},
+    {stdin = content, text = true}
+  ):wait()
+
+  if result.code ~= 0 then
+    -- If conversion fails, return original content
+    vim.notify("Warning: encoding conversion failed, using original content", vim.log.levels.WARN)
+    return content
+  end
+
+  return result.stdout
+end
+
 -- Fetch URL using curl
 local function fetch_url(url)
+  -- Security: Validate URL size to prevent resource exhaustion
+  if #url > 2048 then
+    return nil, "URL too long (max: 2048 characters)"
+  end
+
   -- Use vim.system for safer command execution (Neovim 0.10+)
   -- Add user-agent to avoid blocking, timeout to prevent hanging
+  -- Security: Pass URL as direct argument, NOT through shell
 
-  -- Planalto website uses ISO-8859-1 encoding, convert directly
+  local user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
+
+  -- Planalto website uses ISO-8859-1 encoding
   if web_util.is_planalto_url(url) then
-    -- Use vim.fn.shellescape to prevent command injection
-    local escaped_url = vim.fn.shellescape(url)
+    -- Step 1: Fetch content using curl (direct arguments, no shell)
     local result = vim.system(
       {
-        "sh",
-        "-c",
-        string.format(
-          'curl -L -s -S --max-time 30 -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" %s | iconv -f ISO-8859-1 -t UTF-8',
-          escaped_url
-        )
+        "curl",
+        "-L",              -- Follow redirects
+        "-s",              -- Silent mode
+        "-S",              -- Show errors
+        "--max-time", "30", -- Timeout
+        "-A", user_agent,   -- User agent
+        url                 -- URL as direct argument (safe)
       },
-      {text = true}
+      {text = false}  -- Binary mode for encoding conversion
     ):wait()
 
     if result.code ~= 0 then
@@ -102,7 +132,9 @@ local function fetch_url(url)
       return nil, "Failed to fetch URL: " .. error_msg
     end
 
-    return result.stdout, nil
+    -- Step 2: Convert encoding from ISO-8859-1 to UTF-8
+    local utf8_content = convert_encoding(result.stdout, "ISO-8859-1", "UTF-8")
+    return utf8_content, nil
   end
 
   -- For generic URLs, try to detect encoding from content-type or meta tags
@@ -162,21 +194,10 @@ local function fetch_url(url)
         encoding = "WINDOWS-1252"
       end
 
-      -- Re-fetch with encoding conversion
-      local escaped_url = vim.fn.shellescape(url)
-      local convert_result = vim.system(
-        {
-          "sh", "-c",
-          string.format(
-            'curl -L -s -S --max-time 30 -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" %s | iconv -f %s -t UTF-8',
-            escaped_url, encoding
-          )
-        },
-        {text = true}
-      ):wait()
-
-      if convert_result.code == 0 then
-        return convert_result.stdout, nil
+      -- Convert using our safe encoding converter
+      local converted = convert_encoding(html, encoding, "UTF-8")
+      if converted then
+        return converted, nil
       end
     end
   end

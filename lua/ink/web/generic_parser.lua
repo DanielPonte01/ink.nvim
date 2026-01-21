@@ -2,6 +2,22 @@ local entities = require("ink.html.entities")
 
 local M = {}
 
+-- Security limits
+local MAX_LOOP_ITERATIONS = 10000  -- Maximum iterations for any loop
+
+-- Escape HTML special characters to prevent XSS
+-- This is critical for user-controlled data inserted into HTML
+local function html_escape(str)
+  if not str then return "" end
+  str = tostring(str)  -- Ensure it's a string
+  str = str:gsub("&", "&amp;")
+  str = str:gsub("<", "&lt;")
+  str = str:gsub(">", "&gt;")
+  str = str:gsub('"', "&quot;")
+  str = str:gsub("'", "&#39;")
+  return str
+end
+
 -- Extract content between matching tags (handles nested tags)
 -- @param html: HTML content
 -- @param start_pos: position where opening tag was found
@@ -169,7 +185,9 @@ local function extract_main_content(html)
 
   -- Look for article tags
   local pos = 1
-  while true do
+  local iterations = 0
+  while iterations < MAX_LOOP_ITERATIONS do
+    iterations = iterations + 1
     local article_start = body:find("<article[^>]*>", pos)
     if not article_start then break end
 
@@ -185,7 +203,9 @@ local function extract_main_content(html)
 
   -- Look for main tags
   pos = 1
-  while true do
+  iterations = 0
+  while iterations < MAX_LOOP_ITERATIONS do
+    iterations = iterations + 1
     local main_start = body:find("<main[^>]*>", pos)
     if not main_start then break end
 
@@ -201,7 +221,9 @@ local function extract_main_content(html)
 
   -- Look for divs with content-related classes/ids
   pos = 1
-  while true do
+  iterations = 0
+  while iterations < MAX_LOOP_ITERATIONS do
+    iterations = iterations + 1
     local div_start, div_attrs_end = body:find("<div([^>]*)>", pos)
     if not div_start then break end
 
@@ -243,7 +265,9 @@ local function clean_html(html)
 
   -- Remove script tags and content (handles nested tags)
   local pos = 1
-  while true do
+  local iterations = 0
+  while iterations < MAX_LOOP_ITERATIONS do
+    iterations = iterations + 1
     local script_start = result:find("<script[^>]*>", pos)
     if not script_start then break end
 
@@ -258,7 +282,9 @@ local function clean_html(html)
 
   -- Remove style tags and content (handles nested tags)
   pos = 1
-  while true do
+  iterations = 0
+  while iterations < MAX_LOOP_ITERATIONS do
+    iterations = iterations + 1
     local style_start = result:find("<style[^>]*>", pos)
     if not style_start then break end
 
@@ -277,7 +303,9 @@ local function clean_html(html)
   -- Remove common non-content elements (handles nested tags)
   for _, tag in ipairs({"nav", "header", "footer"}) do
     pos = 1
-    while true do
+    iterations = 0
+    while iterations < MAX_LOOP_ITERATIONS do
+      iterations = iterations + 1
       local tag_start = result:find("<" .. tag .. "[^>]*>", pos)
       if not tag_start then break end
 
@@ -335,6 +363,9 @@ function M.build_raw_spine(parsed_page)
   -- Add IDs to headers for navigation
   local content_with_ids = add_header_ids(parsed_page.raw_content)
 
+  -- Security: Escape title to prevent XSS
+  local safe_title = html_escape(parsed_page.title)
+
   local content = string.format([[
 <style>
   body { max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; }
@@ -346,7 +377,7 @@ function M.build_raw_spine(parsed_page)
 <div class="content">
 %s
 </div>
-]], parsed_page.title, content_with_ids)
+]], safe_title, content_with_ids)
 
   return {
     {
@@ -363,6 +394,9 @@ function M.build_compiled_spine(parsed_page)
   -- Add IDs to headers for navigation
   local content_with_ids = add_header_ids(parsed_page.compiled_content)
 
+  -- Security: Escape title to prevent XSS
+  local safe_title = html_escape(parsed_page.title)
+
   local content = string.format([[
 <style>
   body { max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; }
@@ -374,7 +408,7 @@ function M.build_compiled_spine(parsed_page)
 <div class="content">
 %s
 </div>
-]], parsed_page.title, content_with_ids)
+]], safe_title, content_with_ids)
 
   return {
     {
@@ -393,7 +427,9 @@ function M.build_toc(parsed_page)
 
   -- Extract h2 and h3 headers in order of appearance
   local pos = 1
-  while true do
+  local iterations = 0
+  while iterations < MAX_LOOP_ITERATIONS do
+    iterations = iterations + 1
     -- Find next h2 or h3
     local h2_start = parsed_page.compiled_content:find("<h2[^>]*>", pos)
     local h3_start = parsed_page.compiled_content:find("<h3[^>]*>", pos)

@@ -2,6 +2,24 @@ local entities = require("ink.html.entities")
 
 local M = {}
 
+-- Security limits
+local MAX_HTML_SIZE = 10 * 1024 * 1024  -- 10MB max HTML size
+local MAX_ARTICLES = 10000  -- Maximum number of articles to process
+local MAX_LOOP_ITERATIONS = 10000  -- Maximum iterations for any loop
+
+-- Escape HTML special characters to prevent XSS
+-- This is critical for user-controlled data inserted into HTML
+local function html_escape(str)
+  if not str then return "" end
+  str = tostring(str)  -- Ensure it's a string
+  str = str:gsub("&", "&amp;")
+  str = str:gsub("<", "&lt;")
+  str = str:gsub(">", "&gt;")
+  str = str:gsub('"', "&quot;")
+  str = str:gsub("'", "&#39;")
+  return str
+end
+
 -- Helper function to clean and normalize text
 -- Consolidates multiple gsub operations that are repeated throughout the code
 local function clean_text(text)
@@ -56,76 +74,71 @@ end
 
 -- Normalize strikethrough: convert CSS text-decoration:line-through to <strike> tags
 -- This ensures consistent handling in both rendering and removal
--- Optimized version using simpler pattern matching
+-- Simplified version - only process if pattern exists
 local function normalize_strikethrough(html)
+  -- Quick check: if no text-decoration:line-through, return as-is
+  if not html:find("text%-decoration%s*:%s*line%-through") then
+    return html
+  end
+
   local result = html
-  local max_iterations = 1000  -- Safety limit to prevent infinite loops
+  local max_iterations = 100  -- Lower limit for safety
   local iterations = 0
 
-  -- Process one tag at a time to avoid complex backtracking
   while iterations < max_iterations do
     iterations = iterations + 1
 
-    -- Find next occurrence of text-decoration:line-through
-    local style_start, style_end = result:find("text%-decoration%s*:%s*line%-through", 1)
+    -- Find next occurrence
+    local style_start = result:find("text%-decoration%s*:%s*line%-through")
     if not style_start then break end
 
-    -- Search backwards to find the opening tag
-    local tag_start = nil
-    for i = style_start, 1, -1 do
-      if result:sub(i, i) == '<' then
-        tag_start = i
-        break
-      end
+    -- Find opening tag (search backwards using plain find)
+    local tag_start = result:find("<[%w]", math.max(1, style_start - 200))
+    if not tag_start or tag_start >= style_start then
+      -- Can't find tag, mark as processed to avoid infinite loop
+      result = result:gsub("text%-decoration%s*:%s*line%-through", "text-decoration:processed", 1)
+      goto continue
     end
 
-    if not tag_start then
-      -- Couldn't find opening tag, skip this occurrence
-      break
-    end
-
-    -- Extract tag name
+    -- Get tag name
     local tag_name = result:sub(tag_start + 1):match("^([%w]+)")
     if not tag_name then
-      break
+      result = result:gsub("text%-decoration%s*:%s*line%-through", "text-decoration:processed", 1)
+      goto continue
     end
 
-    -- Find end of opening tag
+    -- Find tag end
     local opening_end = result:find(">", tag_start, true)
     if not opening_end then
-      break
+      result = result:gsub("text%-decoration%s*:%s*line%-through", "text-decoration:processed", 1)
+      goto continue
     end
 
-    -- Find the matching closing tag using plain text search (more efficient)
+    -- Find closing tag
     local close_pattern = "</" .. tag_name .. ">"
-    local close_start = result:find(close_pattern, opening_end + 1, true)
+    local close_start = result:find(close_pattern, opening_end, true)
     if not close_start then
-      -- No closing tag found, skip
-      break
+      result = result:gsub("text%-decoration%s*:%s*line%-through", "text-decoration:processed", 1)
+      goto continue
     end
 
-    local close_end = close_start + #close_pattern - 1
-
-    -- Extract parts
-    local opening_tag = result:sub(tag_start, opening_end)
+    -- Extract content
     local content = result:sub(opening_end + 1, close_start - 1)
-    local closing_tag = result:sub(close_start, close_end)
 
-    -- Don't double-wrap if already has <strike>
-    if not content:match("^%s*<strike>") then
-      local replacement = opening_tag .. "<strike>" .. content .. "</strike>" .. closing_tag
-      result = result:sub(1, tag_start - 1) .. replacement .. result:sub(close_end + 1)
-    else
-      -- Already wrapped, just move past it to avoid infinite loop
-      -- Replace the style portion to avoid matching it again
-      local before = result:sub(1, style_start - 1)
-      local after = result:sub(style_end + 1)
-      result = before .. "text-decoration-processed" .. after
+    -- Only wrap if not already wrapped
+    if not content:match("<strike>") then
+      local new_content = "<strike>" .. content .. "</strike>"
+      result = result:sub(1, opening_end) .. new_content .. result:sub(close_start)
     end
+
+    -- Mark this occurrence as processed
+    result = result:gsub("text%-decoration%s*:%s*line%-through", "text-decoration:processed", 1)
+
+    ::continue::
   end
 
-  -- Clean up the processed markers
-  result = result:gsub("text%-decoration%-processed", "text-decoration:line-through")
+  -- Restore the original style attribute
+  result = result:gsub("text%-decoration:processed", "text-decoration:line-through")
 
   return result
 end
@@ -171,8 +184,11 @@ local function remove_strikethrough(html)
   -- This is safer for large HTML documents
   local strike_pattern = "<[sS][tT][rR][iI][kK][eE]>"
   local strike_end_pattern = "</[sS][tT][rR][iI][kK][eE]>"
+  local iterations = 0
 
-  while true do
+  while iterations < MAX_LOOP_ITERATIONS do
+    iterations = iterations + 1
+
     local start_pos = result:find(strike_pattern)
     if not start_pos then break end
 
@@ -208,8 +224,15 @@ local function parse_articles(html)
   -- Fix malformed inline tags (unclosed <b>, <strong>, etc.)
   html = fix_malformed_inline_tags(html)
 
-  -- Extract the body content
-  local body = html:match("<body>(.-)</body>") or html
+  -- Extract the body content (safer approach to avoid ReDoS)
+  local body
+  local body_start = html:find("<body>", 1, true)
+  local body_end = html:find("</body>", 1, true)
+  if body_start and body_end and body_end > body_start then
+    body = html:sub(body_start + 6, body_end - 1)
+  else
+    body = html
+  end
 
   -- Split into chunks at each "Art. X" pattern
   -- Pattern matches: Art. 1º, Art. 2, Art. 10., Art. 26-A, Art. 1º-AB, etc.
@@ -235,15 +258,21 @@ local function parse_articles(html)
   local header_content = ""
   if #article_parts > 0 then
     local first_article_pos = article_parts[1].pos
-    -- Look backwards to find the start of the paragraph containing the first article
-    local before_first = body:sub(1, first_article_pos - 1)
+    -- Find the last '>' before the first article
+    local before_article = body:sub(1, first_article_pos - 1)
     local last_tag_end = 1
-    for i = #before_first, 1, -1 do
-      if before_first:sub(i, i) == '>' then
-        last_tag_end = i + 1
-        break
-      end
+
+    -- Find all '>' and keep the last one
+    local search_from = 1
+    local iterations = 0
+    while iterations < MAX_LOOP_ITERATIONS do
+      iterations = iterations + 1
+      local tag_end = before_article:find(">", search_from, true)
+      if not tag_end then break end
+      last_tag_end = tag_end + 1
+      search_from = tag_end + 1
     end
+
     header_content = body:sub(1, last_tag_end - 1)
   else
     -- No articles found, everything is header
@@ -258,18 +287,23 @@ local function parse_articles(html)
     -- Find where this article ends (before the next article starts)
     local end_pos
     if article_parts[i + 1] then
-      -- Look backwards from next article to find the closing </p>
-      local before_next = body:sub(start_pos, next_article_pos - 1)
-
       -- Find the last </p> before the next article
-      local last_p_close = 0
-      for match_pos in before_next:gmatch("()</[pP]>") do
-        last_p_close = match_pos
+      local last_p_pos = nil
+      local search_from = start_pos
+      local iterations = 0
+
+      -- Find all </p> tags in range and keep the last one
+      while search_from < next_article_pos and iterations < MAX_LOOP_ITERATIONS do
+        iterations = iterations + 1
+        local p_close = body:find("</[pP]>", search_from)
+        if not p_close or p_close >= next_article_pos then break end
+        last_p_pos = p_close
+        search_from = p_close + 1
       end
 
-      if last_p_close > 0 then
-        -- Position is relative to start_pos, convert to absolute
-        end_pos = start_pos + last_p_close + 3 - 1 -- +3 for </p>, -1 for 0-indexing
+      if last_p_pos then
+        -- Position at end of </p> tag
+        end_pos = last_p_pos + 3
       else
         -- Fallback: stop just before next article
         end_pos = next_article_pos - 1
@@ -280,16 +314,26 @@ local function parse_articles(html)
     end
 
     -- Look backwards to find the opening <p> tag for this article
-    -- We want to capture the complete <p...> tag with all attributes
-    local before = body:sub(math.max(1, start_pos - 2000), start_pos - 1)
-    local p_start_distance = 0
+    -- Search in a reasonable window before the article
+    local search_start = math.max(1, start_pos - 2000)
+    local search_area = body:sub(search_start, start_pos - 1)
 
-    -- Find the opening <p (could have attributes)
-    for j = #before, 1, -1 do
-      if before:sub(j, j+1) == "<p" or before:sub(j, j+1) == "<P" then
-        p_start_distance = #before - j + 1
-        break
-      end
+    -- Find the last <p or <P in the search area
+    local p_start_distance = 0
+    local last_p = nil
+    local search_from = 1
+    local iterations = 0
+
+    while iterations < MAX_LOOP_ITERATIONS do
+      iterations = iterations + 1
+      local p_pos = search_area:find("<[pP]", search_from)
+      if not p_pos then break end
+      last_p = p_pos
+      search_from = p_pos + 1
+    end
+
+    if last_p then
+      p_start_distance = #search_area - last_p + 1
     end
 
     -- Extract the full content starting from the <p> tag
@@ -375,9 +419,43 @@ end
 
 -- Parse page structure from HTML
 function M.parse(html, url)
+  -- Security: Validate input size to prevent resource exhaustion
+  if not html or type(html) ~= "string" then
+    error("Invalid HTML input: expected string")
+  end
+
+  if #html > MAX_HTML_SIZE then
+    error(string.format("HTML too large: %d bytes (max: %d bytes)", #html, MAX_HTML_SIZE))
+  end
+
+  if not url or type(url) ~= "string" then
+    error("Invalid URL input: expected string")
+  end
+
+  -- Security: Validate URL format (basic check for http/https or relative paths)
+  -- This prevents javascript: URLs and other potentially dangerous schemes
+  if #url > 2048 then
+    error("URL too long (max: 2048 characters)")
+  end
+
+  -- Allow http://, https://, or relative paths (starting with /)
+  -- Reject javascript:, data:, file:, and other dangerous schemes
+  local url_lower = url:lower()
+  if not (url_lower:match("^https?://") or url:match("^/")) then
+    -- Check if it's trying to use a dangerous scheme
+    if url_lower:match("^%w+:") then
+      error("Invalid URL scheme: only http, https, or relative paths allowed")
+    end
+  end
+
   local page_info = extract_page_info(url, html)
   local ementa = extract_ementa(html)
   local articles, header = parse_articles(html)
+
+  -- Security: Limit number of articles to prevent resource exhaustion
+  if #articles > MAX_ARTICLES then
+    error(string.format("Too many articles: %d (max: %d)", #articles, MAX_ARTICLES))
+  end
 
   local page_id = "Lei " .. page_info.number
   if page_info.year ~= "unknown" then
@@ -448,21 +526,12 @@ function M.build_raw_spine(parsed_page)
     -- Remove blockquotes from raw content
     local cleaned_content = remove_blockquotes(article.raw)
 
-    -- DEBUG: Log article 337-C to see raw HTML
-    if article.number == "337-C" then
-      local debug_file = io.open("/tmp/ink_debug_337c.html", "w")
-      if debug_file then
-        debug_file:write("=== RAW ARTICLE HTML ===\n")
-        debug_file:write(article.raw)
-        debug_file:write("\n\n=== CLEANED CONTENT ===\n")
-        debug_file:write(cleaned_content)
-        debug_file:close()
-      end
-    end
+    -- Sanitize article number to prevent XSS
+    local safe_number = html_escape(article.number)
 
     -- Use concatenation to avoid string.format issues with % in content
-    local article_html = '<div class="article" id="article-' .. article.number .. '">\n'
-      .. '  <h2>Artigo ' .. article.number .. '</h2>\n'
+    local article_html = '<div class="article" id="article-' .. safe_number .. '">\n'
+      .. '  <h2>Artigo ' .. safe_number .. '</h2>\n'
       .. '  ' .. cleaned_content .. '\n'
       .. '</div>\n'
     table.insert(content_parts, article_html)
@@ -533,9 +602,12 @@ function M.build_compiled_spine(parsed_page)
       article_content = remove_blockquotes(article.compiled)
     end
 
+    -- Sanitize article number to prevent XSS
+    local safe_number = html_escape(article.number)
+
     -- Use concatenation to avoid string.format issues with % in content
-    local article_html = '<div class="article" id="article-' .. article.number .. '">\n'
-      .. '  <h2>Artigo ' .. article.number .. '</h2>\n'
+    local article_html = '<div class="article" id="article-' .. safe_number .. '">\n'
+      .. '  <h2>Artigo ' .. safe_number .. '</h2>\n'
       .. '  ' .. article_content .. '\n'
       .. '</div>\n'
     table.insert(content_parts, article_html)
@@ -559,9 +631,12 @@ function M.build_toc(parsed_page)
   local toc = {}
 
   for _, article in ipairs(parsed_page.articles) do
+    -- Sanitize article number to prevent XSS in href
+    local safe_number = html_escape(article.number)
+
     table.insert(toc, {
       label = "Art. " .. article.number .. ": " .. article.title,
-      href = "pagina-completa#article-" .. article.number,
+      href = "pagina-completa#article-" .. safe_number,
       level = 1
     })
   end

@@ -44,6 +44,182 @@ function M.is_planalto_url(url)
   return web_util.is_planalto_url(url)
 end
 
+-- deprecated
+local function old_validate_url(url)
+  -- Check type and size
+  if not url or type(url) ~= "string" then
+    return false, "Invalid URL: must be a string"
+  end
+
+  if #url > 2048 then
+    return false, "URL too long (max: 2048 characters)"
+  end
+
+  -- Must start with http:// or https://
+  if not url:match("^https?://") then
+    return false, "Invalid URL: must start with http:// or https://"
+  end
+
+  -- Extract hostname from URL
+  local hostname = url:match("^https?://([^/:]+)")
+  if not hostname then
+    return false, "Invalid URL: cannot extract hostname"
+  end
+
+  -- Security: Block localhost and private IP ranges (SSRF prevention)
+  hostname = hostname:lower()
+
+  -- Block localhost
+  if hostname == "localhost" or hostname == "127.0.0.1" or hostname:match("^127%.") then
+    return false, "Access to localhost is not allowed"
+  end
+
+  -- Block IPv6 localhost
+  if hostname == "::1" or hostname:match("^::ffff:127%.") then
+    return false, "Access to localhost is not allowed"
+  end
+
+  -- Block private IPv4 ranges (RFC 1918)
+  -- 10.0.0.0/8
+  if hostname:match("^10%.") then
+    return false, "Access to private IP ranges is not allowed"
+  end
+
+  -- 172.16.0.0/12
+  local second_octet = hostname:match("^172%.(%d+)%.")
+  if second_octet then
+    second_octet = tonumber(second_octet)
+    if second_octet and second_octet >= 16 and second_octet <= 31 then
+      return false, "Access to private IP ranges is not allowed"
+    end
+  end
+
+  -- 192.168.0.0/16
+  if hostname:match("^192%.168%.") then
+    return false, "Access to private IP ranges is not allowed"
+  end
+
+  -- Block link-local (169.254.0.0/16)
+  if hostname:match("^169%.254%.") then
+    return false, "Access to link-local addresses is not allowed"
+  end
+
+  -- Block metadata services (cloud providers)
+  if hostname:match("169%.254%.169%.254") or hostname == "metadata" or hostname:match("%.metadata%.") then
+    return false, "Access to metadata services is not allowed"
+  end
+
+  return true, nil
+end
+
+-- Validate URL for security (SSRF-safe, Neovim-compatible)
+-- @param url: URL string to validate
+-- @return valid boolean, error message
+local function validate_url(url)
+  -- Basic checks
+  if type(url) ~= "string" then
+    return false, "Invalid URL: must be a string"
+  end
+
+  if #url > 2048 then
+    return false, "URL too long (max: 2048 characters)"
+  end
+
+  if not url:match("^https?://") then
+    return false, "Invalid URL: must start with http:// or https://"
+  end
+
+  -- Reject userinfo (user:pass@host)
+  if url:match("^https?://[^/]+@") then
+    return false, "Userinfo in URL is not allowed"
+  end
+
+  -- Extract hostname (no port)
+  local hostname = url:match("^https?://([^/:]+)")
+  if not hostname then
+    return false, "Invalid URL: cannot extract hostname"
+  end
+
+  hostname = hostname:lower():gsub("%.$", "") -- normalize trailing dot
+
+  -- Reject IP literals entirely (IPv4, IPv6, decimal, hex, shorthand)
+  if hostname:match("^%d+%.") or
+     hostname:match("^%d+$") or
+     hostname:match(":") then
+    return false, "IP literal hosts are not allowed"
+  end
+
+  -- Block obvious local names
+  if hostname == "localhost" or hostname:match("%.localhost$") then
+    return false, "Access to localhost is not allowed"
+  end
+
+  -- Block metadata services (name-based)
+  if hostname == "metadata" or hostname:match("%.metadata%.") then
+    return false, "Access to metadata services is not allowed"
+  end
+
+  -- DNS resolution via libuv (vim.loop)
+  local uv = vim.loop
+  local results = {}
+  local done = false
+  local err_msg
+
+  uv.getaddrinfo(hostname, nil, { socktype = "stream" }, function(err, res)
+    if err then
+      err_msg = err
+    else
+      results = res or {}
+    end
+    done = true
+  end)
+
+  -- Block until DNS completes (safe here: validation step)
+  while not done do
+    uv.run("nowait")
+  end
+
+  if err_msg or #results == 0 then
+    return false, "DNS resolution failed"
+  end
+
+  for _, entry in ipairs(results) do
+    if entry.family == "inet" then
+      -- IPv4 checks
+      local a, b = entry.addr:match("^(%d+)%.(%d+)%.")
+      a, b = tonumber(a), tonumber(b)
+
+      if not a or not b then
+        return false, "Invalid IPv4 address"
+      end
+
+      -- Block loopback, private, link-local
+      if a == 10 or
+         a == 127 or
+         (a == 169 and b == 254) or
+         (a == 192 and b == 168) or
+         (a == 172 and b >= 16 and b <= 31) then
+        return false, "Resolved to private IPv4 address"
+      end
+
+    elseif entry.family == "inet6" then
+      -- Conservative IPv6 policy
+      local ip = entry.addr:lower()
+      if ip == "::1" or
+         ip:match("^fe80:") or
+         ip:match("^fc") or
+         ip:match("^fd") or
+         ip:match("^::ffff:") then
+        return false, "Resolved to disallowed IPv6 address"
+      end
+    else
+      return false, "Unknown address family"
+    end
+  end
+
+  return true, nil
+end
+
 -- Open and parse a web page from URL
 -- Returns data structure compatible with ink.nvim format
 -- @param url: URL to the page (any website)
@@ -52,9 +228,10 @@ end
 function M.open(url, opts)
   opts = opts or {}
 
-  -- Validate URL
-  if not url:match("^https?://") then
-    return nil, "Invalid URL: must start with http:// or https://"
+  -- Security: Validate URL
+  local valid, err = validate_url(url)
+  if not valid then
+    return nil, err
   end
 
   -- Detect site type
