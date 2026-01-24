@@ -9,6 +9,7 @@ local default_config = {
     -- Display settings
     focused_mode = true,           -- Hide distractions (statusline, etc.) when reading
     image_open = true,             -- Allow opening images in external viewer
+    image_viewer = "nsxiv",      -- Image viewer: "default", "feh", "sxiv", "imv", "eog", "gwenview", etc.
     justify_text = false,          -- Enable text justification (adds spaces between words, affects copying)
     max_width = 120,               -- Maximum text width in columns
     width_step = 10,               -- Width change amount per keypress (+/-)

@@ -8,6 +8,18 @@ function M.open_image(src, ctx)
   ctx = ctx or context.current()
   if not ctx then return end
 
+  -- Check if image opening is enabled
+  if context.config and context.config.image_open == false then
+    vim.notify("Image opening is disabled", vim.log.levels.WARN)
+    return
+  end
+
+  -- Sanitize src: prevent absolute paths and path traversal
+  if src:match("^/") or src:match("^~") or src:match("%.%.") then
+    vim.notify("Access denied: Invalid image path", vim.log.levels.ERROR)
+    return
+  end
+
   local chapter_item = ctx.data.spine[ctx.current_chapter_idx]
   local chapter_dir
 
@@ -22,13 +34,21 @@ function M.open_image(src, ctx)
   end
 
   local image_path = chapter_dir .. "/" .. src
-  image_path = vim.fn.resolve(image_path)
 
-  -- Security check (only for EPUB)
-  if ctx.data.format ~= "markdown" and ctx.data.cache_dir then
-    local cache_root = vim.fn.resolve(ctx.data.cache_dir)
-    if image_path:sub(1, #cache_root) ~= cache_root then
-      vim.notify("Access denied: Image path outside EPUB cache", vim.log.levels.ERROR)
+  -- Normalize path before resolving
+  image_path = vim.fn.fnamemodify(image_path, ":p")
+
+  -- Security check: ensure the normalized path is within allowed directory
+  local allowed_root
+  if ctx.data.format == "markdown" then
+    allowed_root = vim.fn.fnamemodify(ctx.data.base_dir, ":p")
+  else
+    allowed_root = ctx.data.cache_dir and vim.fn.fnamemodify(ctx.data.cache_dir, ":p") or nil
+  end
+
+  if allowed_root then
+    if image_path:sub(1, #allowed_root) ~= allowed_root then
+      vim.notify("Access denied: Image path outside allowed directory", vim.log.levels.ERROR)
       return
     end
   end
@@ -38,16 +58,42 @@ function M.open_image(src, ctx)
     return
   end
 
+  -- Resolve symlinks and verify the final target is still within allowed directory
+  local resolved_path = vim.fn.resolve(image_path)
+  if allowed_root then
+    if resolved_path:sub(1, #allowed_root) ~= allowed_root then
+      vim.notify("Access denied: Image symlink target outside allowed directory", vim.log.levels.ERROR)
+      return
+    end
+  end
+
+  -- Use resolved path for opening
+  image_path = resolved_path
+
   local cmd
   if vim.fn.has("mac") == 1 then
     cmd = {"open", image_path}
   elseif vim.fn.has("unix") == 1 then
-    -- Try common image viewers first, fallback to xdg-open
-    local viewers = {"feh", "sxiv", "imv", "eog", "gwenview", "xdg-open"}
-    for _, viewer in ipairs(viewers) do
-      if vim.fn.executable(viewer) == 1 then
-        cmd = {viewer, image_path}
-        break
+    -- Get configured image viewer
+    local configured_viewer = context.config and context.config.image_viewer or "default"
+    local default_viewers = {"feh", "sxiv", "imv", "eog", "gwenview", "xdg-open"}
+
+    if configured_viewer ~= "default" then
+      -- Try configured viewer first
+      if vim.fn.executable(configured_viewer) == 1 then
+        cmd = {configured_viewer, image_path}
+      else
+        vim.notify("Configured viewer '" .. configured_viewer .. "' not found, trying fallback", vim.log.levels.WARN)
+      end
+    end
+
+    -- Fallback to default viewers if no cmd yet
+    if not cmd then
+      for _, viewer in ipairs(default_viewers) do
+        if vim.fn.executable(viewer) == 1 then
+          cmd = {viewer, image_path}
+          break
+        end
       end
     end
   elseif vim.fn.has("win32") == 1 then
