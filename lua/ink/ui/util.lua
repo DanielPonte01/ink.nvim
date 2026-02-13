@@ -14,13 +14,17 @@ function M.open_image(src, ctx)
     return
   end
 
-  -- Sanitize src: prevent absolute paths and path traversal
+  -- Sanitize src: prevent absolute paths, home directory, and path traversal
   if src:match("^/") or src:match("^~") or src:match("%.%.") then
     vim.notify("Access denied: Invalid image path", vim.log.levels.ERROR)
     return
   end
 
   local chapter_item = ctx.data.spine[ctx.current_chapter_idx]
+  if not chapter_item then
+    vim.notify("No chapter loaded", vim.log.levels.ERROR)
+    return
+  end
   local chapter_dir
 
   -- Determine chapter directory based on format
@@ -42,8 +46,10 @@ function M.open_image(src, ctx)
   local allowed_root
   if ctx.data.format == "markdown" then
     allowed_root = vim.fn.fnamemodify(ctx.data.base_dir, ":p")
+  elseif ctx.data.cache_dir then
+    allowed_root = vim.fn.fnamemodify(ctx.data.cache_dir, ":p")
   else
-    allowed_root = ctx.data.cache_dir and vim.fn.fnamemodify(ctx.data.cache_dir, ":p") or nil
+    allowed_root = vim.fn.fnamemodify(chapter_dir, ":p")
   end
 
   if allowed_root then
@@ -69,6 +75,17 @@ function M.open_image(src, ctx)
 
   -- Use resolved path for opening
   image_path = resolved_path
+
+  local ext = image_path:lower():match("%.(%w+)$")
+  local valid_images = {
+    jpg = true, jpeg = true, png = true, gif = true,
+    webp = true, svg = true, bmp = true, ico = true,
+    tiff = true, tif = true
+  }
+  if not ext or not valid_images[ext] then
+    vim.notify("Access denied: Not a valid image file", vim.log.levels.ERROR)
+    return
+  end
 
   local cmd
   if vim.fn.has("mac") == 1 then
@@ -116,6 +133,17 @@ function M.open_image(src, ctx)
 end
 
 function M.open_url(url)
+  if type(url) ~= "string" or url == "" then
+    vim.notify("Invalid URL", vim.log.levels.ERROR)
+    return
+  end
+
+  local normalized_url = url:lower():match("^%s*(.-)%s*$") or url
+  if not normalized_url:match("^https?://") then
+    vim.notify("Only HTTP and HTTPS URLs are allowed", vim.log.levels.ERROR)
+    return
+  end
+
   local cmd
   if vim.fn.has("mac") == 1 then
     cmd = {"open", url}

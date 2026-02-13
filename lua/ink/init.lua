@@ -277,7 +277,7 @@ function M.setup(opts)
                 return
             end
         else
-            vim.notify("Unsupported file format. Please use .epub, .md files, or Planalto URLs", vim.log.levels.ERROR)
+            vim.notify("Unsupported file format. Please use .epub, .md files, or URLs", vim.log.levels.ERROR)
             return
         end
 
