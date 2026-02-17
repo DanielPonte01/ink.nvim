@@ -288,12 +288,12 @@ local function parse_articles(html)
     -- Find where this article ends (before the next article starts)
     local end_pos
     if article_parts[i + 1] then
-      -- Find the last </p> before the next article
+      -- Find the last </p> or unclosed <p> before the next article
       local last_p_pos = nil
       local search_from = start_pos
       local iterations = 0
 
-      -- Find all </p> tags in range and keep the last one
+      -- First pass: find all </p> tags in range and keep the last one
       while search_from < next_article_pos and iterations < MAX_LOOP_ITERATIONS do
         iterations = iterations + 1
         local p_close = body:find("</[pP]>", search_from)
@@ -302,9 +302,22 @@ local function parse_articles(html)
         search_from = p_close + 1
       end
 
-      if last_p_pos then
-        -- Position at end of </p> tag
-        end_pos = last_p_pos + 3
+      -- Second pass: check for unclosed <p> tags that act as implicit boundaries
+      -- This handles cases where <p> is not closed before a new <p> starts
+      if not last_p_pos or last_p_pos < start_pos then
+        search_from = start_pos
+        iterations = 0
+        while search_from < next_article_pos and iterations < MAX_LOOP_ITERATIONS do
+          iterations = iterations + 1
+          local p_open = body:find("<[pP][^>]->", search_from)
+          if not p_open or p_open >= next_article_pos then break end
+          last_p_pos = p_open - 1
+          search_from = p_open + 1
+        end
+      end
+
+      if last_p_pos and last_p_pos >= start_pos then
+        end_pos = last_p_pos
       else
         -- Fallback: stop just before next article
         end_pos = next_article_pos - 1
