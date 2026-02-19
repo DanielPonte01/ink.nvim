@@ -14,8 +14,9 @@ function M.open_image(src, ctx)
     return
   end
 
-  -- Sanitize src: prevent absolute paths, home directory, and path traversal
-  if src:match("^/") or src:match("^~") or src:match("%.%.") then
+  -- Sanitize src: prevent absolute paths and home directory
+  -- Path traversal (..) is handled by the allowed_root check below
+  if src:match("^/") or src:match("^~") then
     vim.notify("Access denied: Invalid image path", vim.log.levels.ERROR)
     return
   end
