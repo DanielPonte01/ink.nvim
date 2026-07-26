@@ -10,7 +10,7 @@ local data = require("ink.library.data")
 local function is_safe_path(path)
 	-- Path should not contain shell metacharacters or suspicious patterns
 	-- Allow: alphanumeric, /, -, _, ., ~, space
-	if path:match("[;&|`$<>%(%){}%[%]!]") then
+	if path:match("[;&|`$<>%{}%[%]!]") then
 		return false
 	end
 	return true
@@ -37,19 +37,24 @@ function M.scan_directory(directory, callback)
 	end
 
 	-- Find all files recursively using vim.loop (async)
-	local stdout = vim.loop.new_pipe(false)
-	local stderr = vim.loop.new_pipe(false)
-	local files = {}
-	local buffer = ""
+    local stdout = vim.loop.new_pipe(false)
+    local stderr = vim.loop.new_pipe(false)
+    local files = {}
+    local buffer = ""
+    local handle
 
-	local handle = vim.loop.spawn("find", {
-		args = { directory, "-type", "f", "(", "-name", "*.epub", "-o", "-name", "*.md", "-o", "-name", "*.markdown", ")" },
-		stdio = { nil, stdout, stderr },
-	}, function(code, signal)
-		-- Process completed
-		stdout:close()
-		stderr:close()
-	end)
+    handle = vim.loop.spawn("find", {
+        args = { directory, "-type", "f", "(", "-name", "*.epub", "-o", "-name", "*.md", "-o", "-name", "*.markdown", ")" },
+        stdio = { nil, stdout, stderr },
+    }, function(code, signal)
+        -- Only close the process handle here, NOT stdout/stderr.
+        -- Closing the pipes here can race ahead of their EOF callback
+        -- and silently swallow it, causing scan_directory to hang.
+        if handle then
+            handle:close()
+            handle = nil
+        end
+    end)
 
 	if not handle then
 		if callback then
@@ -80,7 +85,11 @@ function M.scan_directory(directory, callback)
 			-- Keep incomplete line in buffer
 			buffer = buffer:match("[^\n]*$") or ""
 		else
-			-- EOF - process remaining buffer
+            stdout:read_stop()
+            stdout:close()
+            stderr:read_stop()
+            stderr:close()
+            -- EOF - process remaining buffer
 			if buffer ~= "" then
 				table.insert(files, buffer)
 			end
@@ -137,45 +146,64 @@ function M.process_files(files, callback)
 			return
 		end
 
-		local file_path = files[current_idx]
-		local file_type = "unknown"
+        local file_path = files[current_idx]
+        local file_type = "unknown"
 
-		-- Detect file type
-		if file_path:match("%.epub$") then
-			file_type = "EPUB"
-		elseif file_path:match("%.md$") or file_path:match("%.markdown$") then
-			file_type = "Markdown"
-		end
+        -- Detect file type
+        if file_path:match("%.epub$") then
+            file_type = "EPUB"
+        elseif file_path:match("%.md$") or file_path:match("%.markdown$") then
+            file_type = "Markdown"
+        end
 
-		-- Show progress
-		vim.schedule(function()
-			vim.notify(
-				string.format(
-					"Processing %s %d/%d: %s",
-					file_type,
-					current_idx,
-					total,
-					vim.fn.fnamemodify(file_path, ":t")
-				),
-				vim.log.levels.INFO
-			)
-		end)
+        -- Show progress
+--        if current_idx == 1 or current_idx == total or current_idx % 10 == 0 then
+--            vim.schedule(function()
+--                vim.notify(
+--                    string.format(
+--                        "Processing %s %d/%d: %s",
+--                        file_type,
+--                        current_idx,
+--                        total,
+--                        vim.fn.fnamemodify(file_path, ":t")
+--                    ),
+--                    vim.log.levels.INFO
+--                )
+--            end)
+--        end
 
-		-- Process this file
-		local ok, parsed_data
-		if file_type == "EPUB" then
-			ok, parsed_data = pcall(epub.open, file_path, { skip_toc_generation = true })
-		elseif file_type == "Markdown" then
-			ok, parsed_data = pcall(markdown.open, file_path)
-		else
-			ok = false
-			parsed_data = "Unsupported file type"
-		end
+        if current_idx == 1 or current_idx == total or current_idx % 10 == 0 then
+            vim.schedule(function()
+                vim.api.nvim_echo({
+                    {
+                        string.format(
+                            "Processing %s %d/%d: %s",
+                            file_type,
+                            current_idx,
+                            total,
+                            vim.fn.fnamemodify(file_path, ":t")
+                        ),
+                        "None",
+                    },
+                }, false, {})
+                vim.cmd("redraw")
+            end)
+        end
+        -- Process this file
+        local ok, parsed_data
+        if file_type == "EPUB" then
+            ok, parsed_data = pcall(epub.open, file_path, { skip_toc_generation = true })
+        elseif file_type == "Markdown" then
+            ok, parsed_data = pcall(markdown.open, file_path)
+        else
+            ok = false
+            parsed_data = "Unsupported file type"
+        end
 
-		vim.schedule(function()
-			if ok then
-				local book_info = {
-					slug = parsed_data.slug,
+        vim.schedule(function()
+            if ok then
+                local book_info = {
+                    slug = parsed_data.slug,
 					title = parsed_data.title,
 					author = parsed_data.author,
 					language = parsed_data.language,
